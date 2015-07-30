@@ -1,0 +1,36 @@
+#!/usr/bin/python
+
+# Place this file in .git/hooks/ with this exact name. Be sure it's executable.
+
+# This is a git pre-commit hook that will automatically create a .py
+# version of every .ipynb file. This is useful for code reviews, since there
+# is no way to comment on specific lines in .ipynb files in github.
+# It's experimental, but might be useful.
+#
+# Author: everett@
+
+print 'Running pre-commit hooks...'
+
+import os
+import subprocess
+import sys
+
+changed = subprocess.check_output(
+    'git diff --name-only HEAD'.split()).splitlines()
+changed = [x for x in changed if x.strip()]
+if not changed:
+    sys.exit(0)
+
+IPYNB = '.ipynb'
+for filename in changed:
+    if filename.endswith(IPYNB) and os.path.exists(filename):
+        root = filename[:-len(IPYNB)]
+        newfilename = root + '.autogen.py'
+        print 'Converting %s to %s and adding that to the commit' % (
+            filename, newfilename)
+        cmd = 'ipython nbconvert --to python %s --out %s' % (
+            filename, newfilename)
+        subprocess.call(cmd.split())
+        subprocess.call(['git', 'add', newfilename])
+
+print '...done with pre-commit hooks.'

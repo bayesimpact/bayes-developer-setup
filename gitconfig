@@ -1,0 +1,18 @@
+[user]
+	name = Your Name
+	email = your_github_email@whatever.com
+[core]
+	editor = sublime -n -w
+	excludesfile = '~/.gitignore'
+[push]
+	default = tracking
+[color]
+	ui = true
+[mergetool "nbmerge"]
+	cmd = nbmerge $LOCAL $BASE $REMOTE $MERGED
+[filter "media"]
+	required = true
+	clean = git media clean %f
+	smudge = git media smudge %f
+[init]
+	templatedir = ~/.git_template
