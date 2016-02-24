@@ -1,0 +1,115 @@
+#!/bin/bash
+#
+# A git custom command to submit a reviewed branch.
+# Usage:
+#   git submit [<branch>]
+#   Submits the given or the current branch.
+#
+# It ensures that the modifications of the branch are rebased on the remote
+# master as exactly one commit. It also cleans up the branch locally and
+# remotely.
+#
+# To install it, copy it or link it from /usr/local/bin/git-submit and gzip the
+# manpage to /usr/local/man/man1.
+
+# Find the branch to submit.
+BRANCH="$1"
+if [ -z "${BRANCH}" ]; then
+	BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+	if [ "${BRANCH}" == "master" ]; then
+		echo "branch required:" 1>&2
+		git branch | grep -v \ master$ 1>&2
+		exit 1
+	fi
+fi
+
+# Ensures that current dir is clean.
+if [ -n "$(git diff HEAD --shortstat 2> /dev/null | tail -n1)" ]; then
+	echo "Current git status is dirty. Commit, stash or revert your changes before submitting." 1>&2
+	exit 2
+fi
+
+if ! git rev-parse --verify "${BRANCH}" 2>&1 > /dev/null; then
+	echo "${BRANCH} is not a valid branch." 1>&2
+	exit 8
+fi
+
+# Get latest code from remote.
+git fetch
+
+# The name of the remote used for master, usually "origin".
+readonly BASE_REMOTE="$(git config branch.master.remote)"
+# The full name of the remote master branch, usually "origin/master".
+readonly BASE_BRANCH="${BASE_REMOTE}/master"
+# Git hash of the latest status of remote master.
+readonly BASE_MASTER="$(git rev-parse "${BASE_BRANCH}")"
+# Git hash of the current branch to submit.
+readonly BRANCH_INITIAL="$(git rev-parse "${BRANCH}")"
+# The name of the remote tracked by this branch, usually "origin".
+readonly BRANCH_REMOTE="$(git config "branch.${BRANCH}.remote")"
+# The name of the remote branch tracked by this one.
+readonly BRANCH_MERGE="$(git config "branch.${BRANCH}.merge" | sed -e s/^refs\\/heads\\///)"
+
+# Abort all changes and restore initial state before exiting.
+function abort {
+	echo "Something went wrong, aborting:" 1>&2
+
+	echo "  Set branch master to ${BASE_MASTER}." 1>&2
+	git checkout -f master
+	git reset --hard "${BASE_MASTER}"
+
+	echo "  Set branch ${BRANCH} to ${BRANCH_INITIAL}." 1>&2
+	git checkout -f "${BRANCH}"
+	git reset --hard "${BRANCH_INITIAL}"
+
+	exit 7
+}
+
+# Check that the changes are bundled as one commit on top of origin/master.
+while [ "${BASE_MASTER}" != "$(git rev-parse "${BRANCH}^")" ]; do
+	if [ "${BASE_MASTER}" = "$(git rev-parse "${BRANCH}")" ]; then
+		echo "No changes to submit."
+		exit 3
+	fi
+	if ( git-merge-base --is-ancestor "$(git rev-parse "${BRANCH}^")" "${BASE_MASTER}" ); then
+		git rebase "${BASE_BRANCH}" "${BRANCH}" || (git rebase --abort && exit 10)
+	else
+		echo "You should first group all your changes in one commit:" 1>&2
+		echo "  git rebase -i ${BASE_BRANCH} ${BRANCH}" 1>&2
+		read -p "Rebase now? [y/N]" answer
+		if [ "${answer}" == "y" ] || [ "${answer}" == "Y" ]; then
+			git rebase -i "${BASE_BRANCH}" "${BRANCH}" || (git rebase --abort && exit 9)
+		else
+			exit 4
+		fi
+	fi
+done
+
+# Check that the branch is tracking a remote branch.
+if [ -z "${BRANCH_REMOTE}" ]; then
+	echo "The branch ${BRANCH} is not tracked and has probably never been reviewed." 1>&2
+	echo "  git push -u ${BASE_REMOTE} ${BRANCH}"
+	read -p "Push now? [y/N]" answer
+	if [ "${answer}" == "y" ] || [ "${answer}" == "Y" ]; then
+		git push -u ${BASE_REMOTE} ${BRANCH} || abort
+	fi
+	exit 5
+fi
+
+# Check that the remote branch is synced with the local one.
+if [ "$(git rev-parse "${BRANCH_REMOTE}/${BRANCH_MERGE}")" != "$(git rev-parse "${BRANCH}")" ]; then
+	echo "Push your branch on ${BRANCH_REMOTE}, or you'll have a hard time removing the pull request:" 1>&2
+	echo "  git push -f ${BRANCH_REMOTE} ${BRANCH}:${BRANCH_MERGE}"
+	git push -f "${BRANCH_REMOTE}" "${BRANCH}:${BRANCH_MERGE}" || abort
+fi
+
+# Update master locally.
+git checkout master
+git rebase "${BRANCH}" || (git rebase --abort && abort)
+
+# Push updated master to remote.
+git push "${BASE_REMOTE}" master || abort
+
+# Remove branch locally and remotely.
+git branch -d "${BRANCH}"
+git push ${BRANCH_REMOTE} ":${BRANCH_MERGE}"
