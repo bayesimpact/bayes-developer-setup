@@ -1,0 +1,15 @@
+.TH GIT-SUBMIT 1 "24 February 2016" "1.0" "Git Manual"
+.SH NAME
+git-submit \- submit the given or the current branch
+.SH SYNOPSIS
+\fIgit submit\fR [BRANCH]
+.SH DESCRIPTION
+git-submit rebases a branch on top of master before pushing master to the tracked remote. It does the equivalent of a merge of a pull request on GitHub but by rebasing so keeping a clean history.
+.SH OPTIONS
+git-submit does not take any options. However, you can supply the branch to submit if it is not the current one.
+.SH SEE ALSO
+\fBgit-merge\fR(1), \fBgit-commit\fR(1), \fBgit-push\fR(1)
+.SH AUTHOR
+Pascal Corpet (pascal@corpet.net)
+.SH GIT
+Extends the \fBgit\fR(1) suite
