@@ -71,7 +71,7 @@ while [ "${BASE_MASTER}" != "$(git rev-parse "${BRANCH}^")" ]; do
 		echo "No changes to submit."
 		exit 3
 	fi
-	if ( git-merge-base --is-ancestor "$(git rev-parse "${BRANCH}^")" "${BASE_MASTER}" ); then
+	if ( git merge-base --is-ancestor "$(git rev-parse "${BRANCH}^")" "${BASE_MASTER}" ); then
 		git rebase "${BASE_BRANCH}" "${BRANCH}" || (git rebase --abort && exit 10)
 	else
 		echo "You should first group all your changes in one commit:" 1>&2
