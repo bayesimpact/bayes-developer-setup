@@ -72,13 +72,19 @@ while [ "${BASE_MASTER}" != "$(git rev-parse "${BRANCH}^")" ]; do
 		exit 3
 	fi
 	if ( git merge-base --is-ancestor "$(git rev-parse "${BRANCH}^")" "${BASE_MASTER}" ); then
-		git rebase "${BASE_BRANCH}" "${BRANCH}" || (git rebase --abort && exit 10)
+		if ! (git rebase "${BASE_BRANCH}" "${BRANCH}"); then
+			git rebase --abort
+			exit 10
+		fi
 	else
 		echo "You should first group all your changes in one commit:" 1>&2
 		echo "  git rebase -i ${BASE_BRANCH} ${BRANCH}" 1>&2
 		read -p "Rebase now? [y/N]" answer
 		if [ "${answer}" == "y" ] || [ "${answer}" == "Y" ]; then
-			git rebase -i "${BASE_BRANCH}" "${BRANCH}" || (git rebase --abort && exit 9)
+			if ! (git rebase -i "${BASE_BRANCH}" "${BRANCH}"); then
+				git rebase --abort
+				exit 9
+			fi
 		else
 			exit 4
 		fi
@@ -105,7 +111,10 @@ fi
 
 # Update master locally.
 git checkout master
-git rebase "${BRANCH}" || (git rebase --abort && abort)
+if ! (git rebase "${BRANCH}"); then
+	git rebase --abort
+	abort
+fi
 
 # Push updated master to remote.
 git push "${BASE_REMOTE}" master || abort
