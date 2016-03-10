@@ -1,0 +1,8 @@
+version: "2"
+services:
+  git-submit-test:
+    build:
+      context: .
+      dockerfile: git-submit-test/Dockerfile
+    volumes:
+      - ./git-submit-test:/test
