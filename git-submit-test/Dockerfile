@@ -1,13 +1,7 @@
-FROM ruby:2.2.3
+FROM lascap/aruba-test
 
+# Install git.
 RUN apt-get update -qq && apt-get install -qqy git
 
-RUN mkdir /test
-WORKDIR /test
-
-RUN gem install cucumber -v=2.3.2
-RUN gem install aruba -v=0.14.0
-
+# "Install" git-submit.
 ADD git-submit /usr/bin/
-
-CMD ["cucumber"]
