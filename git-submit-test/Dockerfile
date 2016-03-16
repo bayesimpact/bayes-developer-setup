@@ -4,4 +4,4 @@ FROM lascap/aruba-test
 RUN apt-get update -qq && apt-get install -qqy git
 
 # "Install" git-submit.
-ADD git-submit /usr/bin/
+ADD bin/git-submit /usr/bin/
