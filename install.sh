@@ -34,8 +34,8 @@ if [ $? -ne 0 ]; then
 fi
 
 # Refresh repo.
-git pull origin master
-git reset --hard
+echo "Pulling latest version from GitHub."
+git pull origin master 2> /dev/null > /dev/null
 
 # Check if already in crontab.
 readonly TMP_CRON=$(mktemp)
@@ -63,4 +63,4 @@ function add_to_bashrc {
 add_to_bashrc 'bin' "export PATH=\"\$PATH:$DIR/bin\""
 
 # Install manuals.
-add_to_bashrc 'man' "export MANPATH=\"\$(manpath):$DIR/man\""
+add_to_bashrc 'man' "MANPATH= export MANPATH=\"\$(manpath):$DIR/man\""
