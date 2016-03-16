@@ -55,7 +55,7 @@ function add_to_bashrc {
 
   local marker="  # ${NAME} ${label}"
 
-  sed -i "/${marker}/d" "${BASHRC}" 2> /dev/null
+  sed -i -e "/${marker}/d" "${BASHRC}" 2> /dev/null
   echo "${line}${marker}" >> "${BASHRC}"
 }
 
