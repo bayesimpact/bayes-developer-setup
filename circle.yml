@@ -11,4 +11,4 @@ dependencies:
 
 test:
   override:
-    - docker-compose run git-submit-test
+    - docker-compose run test

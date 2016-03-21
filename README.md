@@ -11,4 +11,4 @@ running `install.sh` (no need to clone the repo yourself).
 Run tests for `git-submit` using Docker:
 
 * [Install](http://go/wiki/Docker) docker and docker-compose.
-* Run `docker-compose run --rm git-submit-test`
+* Run `docker-compose run --rm test`

@@ -1,0 +1,29 @@
+#!/bin/bash
+readonly REVIEWER=$1
+
+readonly BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+if [ -z "${BRANCH}" ]; then
+  exit 2
+fi
+
+if [ "${BRANCH}" == "master" ]; then
+  echo "branch required:" 1>&2
+  git branch | grep -v \ master$ 1>&2
+  exit 1
+fi
+
+git push -u origin "${BRANCH}"
+
+readonly MESSAGE_FILE=$(mktemp)
+
+git log "master..${BRANCH}" --format=%B > "${MESSAGE_FILE}"
+
+# TODO: Replace by a programmatic way of setting the reviewer.
+if [ -n "${REVIEWER}" ]; then
+  echo >> "${MESSAGE_FILE}"
+  echo "+@${REVIEWER}" >> "${MESSAGE_FILE}"
+fi
+
+hub pull-request -F "${MESSAGE_FILE}"
+
+rm "${MESSAGE_FILE}"

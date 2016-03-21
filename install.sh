@@ -64,3 +64,17 @@ add_to_bashrc 'bin' "if [[ \":\$PATH:\" != *\":$DIR/bin:\"* ]]; then export PATH
 
 # Install manuals.
 add_to_bashrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" != *\":$DIR/man:\"* ]]; then export MANPATH=\"\$MANPATH:$DIR/man\"; fi"
+
+# Install hub.
+if [ -z "$(which hub)" ]; then
+  if [ -x "$(which brew)" ]; then
+    brew install hub
+  else
+    # There's no easy way to install a recent version of hub: we then create a
+    # stub with instructions to install it.
+    echo "#!/bin/bash" > "$DIR/bin/hub"
+    echo "echo Please install hub from https://github.com/github/hub" >> "$DIR/bin/hub"
+    echo "exit 1" >> "$DIR/bin/hub"
+    chmod +x "$DIR/bin/hub"
+  fi
+fi
