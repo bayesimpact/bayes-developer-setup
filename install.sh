@@ -43,27 +43,27 @@ crontab -l 2> /dev/null > "${TMP_CRON}"
 grep -F "${DIR}/install.sh" "${TMP_CRON}" > /dev/null
 if [ $? -ne 0 ]; then
   echo 'Adding this script in crontab for auto-update.'
-  echo "@weekly ${DIR}/install.sh" >> "${TMP_CRON}"
+  echo "@weekly ${SHELL} ${DIR}/install.sh" >> "${TMP_CRON}"
   crontab "${TMP_CRON}"
 fi
 rm "${TMP_CRON}"
 
-readonly BASHRC="${HOME}/.bashrc"
-function add_to_bashrc {
+readonly SHELLRC="${HOME}/.${SHELL#/bin/}rc"
+function add_to_shellrc {
   local label=$1
   local line=$2
 
   local marker="  # ${NAME} ${label}"
 
-  sed -i -e "/${marker}/d" "${BASHRC}" 2> /dev/null
-  echo "${line}${marker}" >> "${BASHRC}"
+  sed -i -e "/${marker}/d" "${SHELLRC}" 2> /dev/null
+  echo "${line}${marker}" >> "${SHELLRC}"
 }
 
 # Install binaries.
-add_to_bashrc 'bin' "if [[ \":\$PATH:\" != *\":$DIR/bin:\"* ]]; then export PATH=\"\$PATH:$DIR/bin\"; fi"
+add_to_shellrc 'bin' "if [[ \":\$PATH:\" != *\":$DIR/bin:\"* ]]; then export PATH=\"\$PATH:$DIR/bin\"; fi"
 
 # Install manuals.
-add_to_bashrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" != *\":$DIR/man:\"* ]]; then export MANPATH=\"\$MANPATH:$DIR/man\"; fi"
+add_to_shellrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" != *\":$DIR/man:\"* ]]; then export MANPATH=\"\$MANPATH:$DIR/man\"; fi"
 
 # Install hub.
 if [ -z "$(which hub)" ]; then
@@ -72,7 +72,7 @@ if [ -z "$(which hub)" ]; then
   else
     # There's no easy way to install a recent version of hub: we then create a
     # stub with instructions to install it.
-    echo "#!/bin/bash" > "$DIR/bin/hub"
+    echo "#!${SHELL}" > "$DIR/bin/hub"
     echo "echo Please install hub from https://github.com/github/hub" >> "$DIR/bin/hub"
     echo "exit 1" >> "$DIR/bin/hub"
     chmod +x "$DIR/bin/hub"
