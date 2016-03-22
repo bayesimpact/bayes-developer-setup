@@ -5,6 +5,8 @@ This has so far only been an issue for using our private Docker registries,
 where the Docker daemon strangely uses a local DNS IP (192.168.2.1) and fails
 to find our docker registry when looked up (e.g. at docker.bayesimpact.org).
 This script sets the VM to use Google's DNS servers, alleviating the issue.
+
+Author: everett
 '''
 
 import sys
