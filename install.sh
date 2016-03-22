@@ -30,7 +30,7 @@ git rev-parse 2> /dev/null
 if [ $? -ne 0 ]; then
   echo 'First install, connecting to git.'
   git init
-  git remote add origin git@github.com:bayesimpact/bayes-developer-setup.git
+  git remote add origin https://github.com/bayesimpact/bayes-developer-setup.git
 fi
 
 # Refresh repo.
