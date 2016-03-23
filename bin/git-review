@@ -12,6 +12,12 @@ if [ "${BRANCH}" == "master" ]; then
   exit 1
 fi
 
+# Ensures that current dir is clean.
+if [ -n "$(git diff HEAD --shortstat 2> /dev/null | tail -n1)" ]; then
+  echo "Current git status is dirty. Commit, stash or revert your changes before sending for review." 1>&2
+  exit 3
+fi
+
 git push -u origin "${BRANCH}"
 
 readonly MESSAGE_FILE=$(mktemp)
