@@ -24,6 +24,7 @@ if [ -n "${REVIEWER}" ]; then
   echo "+@${REVIEWER}" >> "${MESSAGE_FILE}"
 fi
 
-hub pull-request -F "${MESSAGE_FILE}"
+hub pull-request -F "${MESSAGE_FILE}" | \
+  sed -e "s/github.com/reviewable.io\/reviews/;s/pull\///"
 
 rm "${MESSAGE_FILE}"
