@@ -1,0 +1,6 @@
+# Vim backup files.
+.*.swp
+
+# Sublime Text project files
+*.sublime-project
+*.sublime-workspace
