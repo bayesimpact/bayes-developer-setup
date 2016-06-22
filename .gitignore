@@ -4,3 +4,9 @@
 # Sublime Text project files
 *.sublime-project
 *.sublime-workspace
+
+# Node files
+node_modules
+
+# Mac tmp files
+.DS_Store

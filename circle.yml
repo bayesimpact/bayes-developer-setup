@@ -12,3 +12,5 @@ dependencies:
 test:
   override:
     - docker-compose run test
+    - docker-compose run test-reviewable npm run test
+    - docker-compose run test-reviewable npm run lint

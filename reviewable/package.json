@@ -1,0 +1,32 @@
+{
+  "name": "reviewable",
+  "version": "1.0.0",
+  "description": "Bayes PR conditions for reviewable",
+  "main": "lgtm_plus_resolved_discussions.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "lint": "./node_modules/.bin/eslint . --ext js",
+    "test": "./node_modules/.bin/mocha --reporter spec",
+    "test:watch": "./node_modules/.bin/mocha --reporter spec --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bayesimpact/bayes-developer-setup.git"
+  },
+  "author": "Stephan Gabler stephan@bayesimpact.org",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/bayesimpact/bayes-developer-setup/issues"
+  },
+  "homepage": "https://github.com/bayesimpact/bayes-developer-setup#readme",
+  "devDependencies": {
+    "chai": "^3.5.0",
+    "eslint": "^2.13.1",
+    "mocha": "^2.5.3"
+  },
+  "dependencies": {
+    "underscore": "^1.8.3"
+  }
+}
