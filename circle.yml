@@ -1,14 +1,14 @@
+# TODO: Build the containers in the dependency step. Had trouble make this work on circleCI.
 machine:
   pre:
     - curl -sSL https://s3.amazonaws.com/circle-downloads/install-circleci-docker.sh | bash -s -- 1.10.0
-
   services:
     - docker
-
 dependencies:
   post:
     - sudo pip install --upgrade docker-compose==1.6.2
-
 test:
   override:
     - docker-compose run test
+    - docker-compose run test-reviewable
+    - docker-compose run test-reviewable npm run lint
