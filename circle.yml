@@ -1,15 +1,9 @@
+# TODO: Build the containers in the dependency step
 machine:
   pre:
     - curl -sSL https://s3.amazonaws.com/circle-downloads/install-circleci-docker.sh | bash -s -- 1.10.0
-
   services:
     - docker
-
-dependencies:
-  post:
-    - sudo pip install --upgrade docker-compose==1.6.2
-  override:
-    - docker-compose build test test-reviewable
 test:
   override:
     - docker-compose run test
