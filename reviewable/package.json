@@ -1,7 +1,7 @@
 {
   "name": "reviewable",
   "version": "1.0.0",
-  "description": "Bayes PR conditions for reviewable",
+  "description": "Bayes PR conditions for Reviewable",
   "main": "lgtm_plus_resolved_discussions.js",
   "directories": {
     "test": "tests"

@@ -4,11 +4,16 @@
 // Additionally all files need to be marked as reviewed and the PR
 // author has to answer all discussions.
 
+// When run on reviewable, this script will have a `review` object
+// accessible in its scope. This object contains all the information
+// about the current PR.
+
 /*global _ review:true*/
 
 const descriptions = []
 
 // LGTM approval.
+// TODO: Check for LGTM cancellation.
 // Approval by username
 const approvals = []
 _.each(review.sentiments, function(sentiment) {
@@ -21,7 +26,7 @@ _.each(review.sentiments, function(sentiment) {
 const assignees = _.pluck(review.pullRequest.assignees, 'username')
 const atLeastOneLgtm = !!_.intersection(approvals, assignees).length
 if (!atLeastOneLgtm) {
-  descriptions.push('LGTM missing!')
+  descriptions.push('LGTM missing')
 }
 
 
@@ -39,8 +44,7 @@ let fileBlockers = _.chain(review.files).
     value()
 
 if (!allFilesReviewed && _.some(fileBlockers, user => !user)) {
-  fileBlockers =
-    fileBlockers.concat(review.pullRequest.assignees)
+  fileBlockers = fileBlockers.concat(review.pullRequest.assignees)
 }
 if (!allFilesReviewed) {
   descriptions.push('Unreviewed files!')
@@ -56,7 +60,7 @@ const discussionsBlockedByAuthor = _.chain(review.discussions).
     value()
 const allDiscussionsResolved = !discussionsBlockedByAuthor.length
 if (!allDiscussionsResolved) {
-  descriptions.push('Unresolved discussions!')
+  descriptions.push('Unresolved discussions')
 }
 
 

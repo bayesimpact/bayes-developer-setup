@@ -1,6 +1,5 @@
 {
   "extends": ["eslint:recommended"],
-  // "parser": "babel-eslint",
   "plugins": [],
   "ecmaFeatures": {
     "modules": true

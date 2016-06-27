@@ -8,9 +8,10 @@ machine:
 dependencies:
   post:
     - sudo pip install --upgrade docker-compose==1.6.2
-
+  override:
+    - docker-compose build test test-reviewable
 test:
   override:
     - docker-compose run test
-    - docker-compose run test-reviewable npm run test
+    - docker-compose run test-reviewable
     - docker-compose run test-reviewable npm run lint
