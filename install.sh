@@ -93,7 +93,7 @@ else
 fi
 
 # Install hub.
-HUB_VERSION="2.3.0-pre8"
+HUB_VERSION="2.2.9"
 if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.* //")" != "${HUB_VERSION}" ]; then
 
   if [ "$(uname)" == "Darwin" ]; then
