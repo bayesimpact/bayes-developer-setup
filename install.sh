@@ -93,9 +93,19 @@ else
 fi
 
 # Install hub.
-if [ -z "$(which hub)" ]; then
-  if [ -x "$(which brew)" ]; then
-    brew install hub
+HUB_VERSION="2.3.0-pre8"
+if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.* //")" != "${HUB_VERSION}" ]; then
+
+  if [ "$(uname)" == "Darwin" ]; then
+    HUB_PLATFORM="darwin-amd64"
+  fi
+  if [ "$(uname)" == "Linux" ] && [ "$(uname -p)" == "x86_64" ]; then
+    HUB_PLATFORM="linux-amd64"
+  fi
+
+  if [ -n "${HUB_PLATFORM}" ]; then
+    wget "https://github.com/github/hub/releases/download/v${HUB_VERSION}/hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz" -O - | \
+      tar xz -C "${DIR}" --strip-components 1 "hub-${HUB_PLATFORM}-${HUB_VERSION}/bin" -C "${DIR}" --strip-components 1
   else
     # There's no easy way to install a recent version of hub: we then create a
     # stub with instructions to install it.
