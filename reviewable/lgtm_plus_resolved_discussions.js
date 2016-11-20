@@ -17,7 +17,7 @@ const descriptions = []
 const approvals = []
 _.each(review.sentiments, function(sentiment) {
   const emojis = _.indexBy(sentiment.emojis)
-  if (emojis.lgtm) {
+  if (emojis.lgtm || emojis.lgtm_strong) {
     approvals.push(sentiment.username)
   }
 })
