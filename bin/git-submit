@@ -13,7 +13,13 @@
 # manpage to /usr/local/man/man1.
 
 # Find the branch to submit.
-BRANCH="$1"
+if [ "$1" == "-f" ] || [ "$1" == "--force" ]; then
+  BRANCH="$2"
+  FORCE_SUBMIT="$1"
+else
+  BRANCH="$1"
+  FORCE_SUBMIT="$2"
+fi
 if [ -z "${BRANCH}" ]; then
 	BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 	if [ "${BRANCH}" == "master" ]; then
@@ -32,6 +38,20 @@ fi
 if ! git rev-parse --verify "${BRANCH}" 2>&1 > /dev/null; then
 	echo "${BRANCH} is not a valid branch." 1>&2
 	exit 8
+fi
+
+# Ensures that the Continuous Integration is successful.
+if [ -x "$(which hub)" ]; then
+  readonly CI_STATUS="$(hub ci-status "${BRANCH}")"
+  if [ "${CI_STATUS}" != "success" ]; then
+    if [ "${FORCE_SUBMIT}" == "-f" ] || [ "${FORCE_SUBMIT}" == "--force" ]; then
+      echo "WARNING: forcing submission despite CI status \"${CI_STATUS}\"."
+    else
+      echo "Continuous integration is \"${CI_STATUS}\", use \"-f\" to submit anyway:"
+      hub ci-status -v "${BRANCH}"
+      exit 11
+    fi
+  fi
 fi
 
 # Get latest code from remote.
