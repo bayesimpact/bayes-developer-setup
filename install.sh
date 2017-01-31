@@ -65,33 +65,6 @@ add_to_shellrc 'bin' "if [[ \":\$PATH:\" != *\":$DIR/bin:\"* ]]; then export PAT
 # Install manuals.
 add_to_shellrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" != *\":$DIR/man:\"* ]]; then export MANPATH=\"\$MANPATH:$DIR/man\"; fi"
 
-# OSX specific setup
-readonly DOCKER_OSX_VM_CONFIG="${HOME}/.docker/machine/machines/default/config.json"
-readonly DOCKER_OSX_VM_SO_URL='http://stackoverflow.com/questions/34296230/how-to-change-default-docker-machines-dns-settings'
-if [ $("uname") == "Darwin" ]; then
-  echo "You're on a Mac. Doing OSX-specific thingies."
-  if [ -z "$(which brew)" ]; then
-    echo "Installing HomeBrew and Cask"
-    curl -L https://github.com/Homebrew/homebrew/tarball/master | tar xz --strip 1 -C /usr/local
-    brew install caskroom/cask/brew-cask
-  fi
-  if [ -z "$(which docker-machine)" ]; then
-    echo "Installing docker toolbox (docker-machine, etc)"
-    brew cask install dockertoolbox
-  fi
-  if [ -e "${DOCKER_OSX_VM_CONFIG}" ]; then
-    echo "Adjusting DNS settings on docker-machine default VM"
-    echo "Editing ${DOCKER_OSX_VM_CONFIG}"
-    sed -i.bak "s/\"Dns\": null/\"Dns\": [\"8.8.8.8\", \"8.8.8.4\"]/" "${DOCKER_OSX_VM_CONFIG}"
-  else
-    echo "Could not find ${DOCKER_OSX_VM_CONFIG}"
-    echo "You may have issues with using Docker Registry in your docker-machine"
-    echo "If so, read ${DOCKER_OSX_VM_SO_URL}"
-  fi
-else
-  echo "You're NOT on a Mac (uname = $(uname)) - no os-specific setup."
-fi
-
 # Install hub.
 HUB_VERSION="2.2.9"
 if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.* //")" != "${HUB_VERSION}" ]; then
