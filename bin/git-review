@@ -48,7 +48,7 @@ if [ -x "${GIT_REVIEW_HOOK}" ]; then
   "${GIT_REVIEW_HOOK}" >> "${MESSAGE_FILE}"
 fi
 
-hub pull-request -F "${MESSAGE_FILE}" | \
+hub pull-request -F "${MESSAGE_FILE}" -a "${REVIEWER}" | \
   sed -e "s/github.com/reviewable.io\/reviews/;s/pull\///"
 
 rm "${MESSAGE_FILE}"

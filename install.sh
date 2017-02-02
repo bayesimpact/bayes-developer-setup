@@ -66,7 +66,7 @@ add_to_shellrc 'bin' "if [[ \":\$PATH:\" != *\":$DIR/bin:\"* ]]; then export PAT
 add_to_shellrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" != *\":$DIR/man:\"* ]]; then export MANPATH=\"\$MANPATH:$DIR/man\"; fi"
 
 # Install hub.
-HUB_VERSION="2.2.9"
+HUB_VERSION="2.3.0-pre8"
 if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.* //")" != "${HUB_VERSION}" ]; then
 
   if [ "$(uname)" == "Darwin" ]; then
