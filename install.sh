@@ -79,7 +79,7 @@ if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.
   if [ -n "${HUB_PLATFORM}" ]; then
     if [ "${HUB_PLATFORM}" == "darwin-amd64" ]; then
       wget "https://github.com/github/hub/releases/download/v${HUB_VERSION}/hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz"
-      tar -zxf hub-darwin-amd64-2.3.0-pre8.tgz -C /Users/dedan/.bayes-developer-setup --strip-components 1 hub-darwin-amd64-2.3.0-pre8/bin
+      tar -zxf hub-darwin-amd64-2.3.0-pre8.tgz -C "${DIR}" --strip-components 1 hub-darwin-amd64-2.3.0-pre8/bin
     else
       wget "https://github.com/github/hub/releases/download/v${HUB_VERSION}/hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz" -O - | \
         tar xz -C "${DIR}" --strip-components 1 "hub-${HUB_PLATFORM}-${HUB_VERSION}/bin" -C "${DIR}" --strip-components 1
