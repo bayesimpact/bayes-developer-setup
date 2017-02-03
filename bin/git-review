@@ -32,7 +32,6 @@ readonly MESSAGE_FILE=$(mktemp)
 
 git log "${BASE_BRANCH}..${BRANCH}" --format=%B > "${MESSAGE_FILE}"
 
-# TODO: Replace by a programmatic way of setting the reviewer.
 if [ -n "${REVIEWER}" ]; then
   echo >> "${MESSAGE_FILE}"
   echo "+@${REVIEWER}" >> "${MESSAGE_FILE}"
