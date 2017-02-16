@@ -26,7 +26,8 @@ if [ -z "$(git diff $(git merge-base HEAD "${BASE_BRANCH}") --shortstat 2> /dev/
   exit 4
 fi
 
-git push -u "${REMOTE_REPO}" "${BRANCH}"
+readonly USERNAME=$(git config user.email | sed -e "s/@.*$//")
+git push -u "${REMOTE_REPO}" "${BRANCH}:${USERNAME}-${BRANCH}"
 
 readonly MESSAGE_FILE=$(mktemp)
 
