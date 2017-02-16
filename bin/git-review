@@ -27,7 +27,8 @@ if [ -z "$(git diff $(git merge-base HEAD "${BASE_BRANCH}") --shortstat 2> /dev/
 fi
 
 readonly USERNAME=$(git config user.email | sed -e "s/@.*$//")
-git push -u "${REMOTE_REPO}" "${BRANCH}:${USERNAME}-${BRANCH}"
+readonly REMOTE_BRANCH="${USERNAME}-${BRANCH}"
+git push -u "${REMOTE_REPO}" "${BRANCH}:${REMOTE_BRANCH}"
 
 readonly MESSAGE_FILE=$(mktemp)
 
@@ -43,7 +44,7 @@ if [ -x "${GIT_REVIEW_HOOK}" ]; then
   "${GIT_REVIEW_HOOK}" >> "${MESSAGE_FILE}"
 fi
 
-hub pull-request -F "${MESSAGE_FILE}" -a "${REVIEWER}" | \
+hub pull-request -F "${MESSAGE_FILE}" -a "${REVIEWER}" -h "${REMOTE_BRANCH}" | \
   sed -e "s/github.com/reviewable.io\/reviews/;s/pull\///"
 
 rm "${MESSAGE_FILE}"
