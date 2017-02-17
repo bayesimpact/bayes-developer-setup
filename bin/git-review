@@ -2,6 +2,9 @@
 readonly REVIEWER=$1
 readonly REMOTE_REPO="origin"
 readonly BASE_BRANCH="${REMOTE_REPO}/master"
+if [ "$1" == "-f" ] || [ "$1" == "--force" ]; then
+  readonly FORCE_PUSH="-f"
+fi
 
 readonly BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 if [ -z "${BRANCH}" ]; then
@@ -28,7 +31,7 @@ fi
 
 readonly USERNAME=$(git config user.email | sed -e "s/@.*$//")
 readonly REMOTE_BRANCH="${USERNAME}-${BRANCH}"
-git push -u "${REMOTE_REPO}" "${BRANCH}:${REMOTE_BRANCH}"
+git push ${FORCE_PUSH} -u "${REMOTE_REPO}" "${BRANCH}:${REMOTE_BRANCH}"
 
 readonly MESSAGE_FILE=$(mktemp)
 
@@ -44,7 +47,9 @@ if [ -x "${GIT_REVIEW_HOOK}" ]; then
   "${GIT_REVIEW_HOOK}" >> "${MESSAGE_FILE}"
 fi
 
-hub pull-request -F "${MESSAGE_FILE}" -a "${REVIEWER}" -h "${REMOTE_BRANCH}" | \
-  sed -e "s/github.com/reviewable.io\/reviews/;s/pull\///"
+if [ -z "${FORCE_PUSH}" ]; then
+  hub pull-request -F "${MESSAGE_FILE}" -a "${REVIEWER}" -h "${REMOTE_BRANCH}" | \
+    sed -e "s/github.com/reviewable.io\/reviews/;s/pull\///"
+fi
 
 rm "${MESSAGE_FILE}"
