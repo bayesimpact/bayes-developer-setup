@@ -43,6 +43,7 @@ readonly GIT_ROOT="$(git rev-parse --show-toplevel)"
 readonly GIT_REVIEW_HOOK="${GIT_ROOT}/.git-review-hook"
 if [ -x "${GIT_REVIEW_HOOK}" ]; then
   export BRANCH
+  export REMOTE_BRANCH
   export REVIEWER
   "${GIT_REVIEW_HOOK}" >> "${MESSAGE_FILE}"
 fi
