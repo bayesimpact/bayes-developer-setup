@@ -3,7 +3,13 @@ Tools, files, and other necessary things to get your machine configured for work
 
 ## Install
 
-You can install it without downloading the repo yourself by downloading and
+Make sure that you are logged-in to the github.com to run hub commands. You can test this by running a random hub command like
+
+    hub issue
+
+Log in with your github username and password. No need to create Access Tokens.
+
+You can install this tool without downloading the repo yourself by downloading and
 running `install.sh` (no need to clone the repo yourself).
 
 ## Tests
