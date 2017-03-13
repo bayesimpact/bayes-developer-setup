@@ -3,7 +3,7 @@ Tools, files, and other necessary things to get your machine configured for work
 
 ## Install
 
-You can install it without downloading the repo yourself by downloading and
+You can install this tool without downloading the repo yourself by downloading and
 running `install.sh` (no need to clone the repo yourself).
 
 ## Tests

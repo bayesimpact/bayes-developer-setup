@@ -93,3 +93,10 @@ if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.
     chmod +x "$DIR/bin/hub"
   fi
 fi
+
+# Check if the user is logged in.
+if [ "$(hub ci-status)" == "success" ]; then
+  echo "Hub is setup successfully.";
+else
+  echo "Make sure you are signed into hub.";
+fi
