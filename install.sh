@@ -93,3 +93,6 @@ if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.
     chmod +x "$DIR/bin/hub"
   fi
 fi
+
+#check if the user is logged in
+hub issue
