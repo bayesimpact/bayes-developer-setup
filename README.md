@@ -9,9 +9,9 @@ Running `which hub` should return something like "~/.bayes-developer-setup/bin/h
 
 ### Common Errors
 
-Hub is not found: This script will automatically write the necessary updates to your .bashrc file. If you use a different file (e.g. .bash_profile) you will need to move the information after install using `cat ~/.bashrc >> ~/.bash_profile` and re-run the install.
+Hub is not found: This script will automatically write the necessary updates to your .bashrc file. If you use a different file (e.g. .bash_profile) you will need to set up your .bash_profile to read from your .bashrc.
 
-Alternatively, you can add this to your .bash_profile:
+To do this, add the follwing to your .bash_profile:
 ```
 if [ -f ~/.bashrc ]; then
    source ~/.bashrc
