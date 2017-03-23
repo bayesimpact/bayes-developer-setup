@@ -31,7 +31,7 @@ The first time you use bayes-developer-setup you'll have to login to Github.
 
 To submit a pull request:
 
-* Run `git up` to make sure your code is up to date with master (this will rebase your code)
+* Run `git up` or `git rebase` to make sure your code is up to date with master (this will rebase your code)
 * Run `git review [reviewer-username]` to push your branch and open a pull request with the specified reviewer
 * When your PR is ready to be merged, run `git submit` to merge your PR and delete your local branch
 
