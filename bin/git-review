@@ -34,6 +34,11 @@ readonly EXISTING_REMOTE_BRANCH=$(git config "branch.${BRANCH}.merge" | sed -e "
 if [ -n "${EXISTING_REMOTE_BRANCH}" ]  && [ "${EXISTING_REMOTE_BRANCH}" != "master" ]; then
   readonly REMOTE_BRANCH="${EXISTING_REMOTE_BRANCH}"
 else
+  if [ -z "${USERNAME}" ]; then
+    echo "Could not find username, most probably you need to setup an email with:" 1>&2
+    echo "  git config user.email <me@bayesimpact.org>" 1>&2
+    exit 5
+  fi
   readonly REMOTE_BRANCH="${USERNAME}-${BRANCH}"
 fi
 git push ${FORCE_PUSH} -u "${REMOTE_REPO}" "${BRANCH}:${REMOTE_BRANCH}"
