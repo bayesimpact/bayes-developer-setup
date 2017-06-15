@@ -1,0 +1,10 @@
+#!bash
+#
+# bash completion support for git-submit
+#
+# Copy this file in /etc/bash_completion.d/git-submit
+
+_git_submit()
+{
+  __gitcomp "$(__git_heads)"
+}
