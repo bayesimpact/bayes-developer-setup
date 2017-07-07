@@ -59,11 +59,15 @@ function add_to_shellrc {
   echo "${line}${marker}" >> "${SHELLRC}"
 }
 
+# Specify scripts' source
+add_to_shellrc 'installation.' ''
+
 # Install binaries.
 add_to_shellrc 'bin' "if [[ \":\$PATH:\" != *\":$DIR/bin:\"* ]]; then export PATH=\"\$PATH:$DIR/bin\"; fi"
 
 # Install manuals.
 add_to_shellrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" != *\":$DIR/man:\"* ]]; then export MANPATH=\"\$MANPATH:$DIR/man\"; fi"
+
 
 # Install hub.
 HUB_VERSION="2.3.0-pre8"
@@ -75,11 +79,10 @@ if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.
   if [ "$(uname)" == "Linux" ] && [ "$(uname -p)" == "x86_64" ]; then
     HUB_PLATFORM="linux-amd64"
   fi
-
   if [ -n "${HUB_PLATFORM}" ]; then
     if [ "${HUB_PLATFORM}" == "darwin-amd64" ]; then
-      wget "https://github.com/github/hub/releases/download/v${HUB_VERSION}/hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz"
-      tar -zxf hub-darwin-amd64-2.3.0-pre8.tgz -C "${DIR}" --strip-components 1 hub-darwin-amd64-2.3.0-pre8/bin
+      curl -O "https://github.com/github/hub/releases/download/v${HUB_VERSION}/hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz"
+      tar -zxf "hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz" -C "${DIR}" --strip-components 1 "hub-${HUB_PLATFORM}-${HUB_VERSION}"/bin
     else
       wget "https://github.com/github/hub/releases/download/v${HUB_VERSION}/hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz" -O - | \
         tar xz -C "${DIR}" --strip-components 1 "hub-${HUB_PLATFORM}-${HUB_VERSION}/bin" -C "${DIR}" --strip-components 1
@@ -94,9 +97,25 @@ if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.
   fi
 fi
 
+
 # Check if the user is logged in.
 if [ "$(hub ci-status)" == "success" ]; then
   echo "Hub is setup successfully.";
 else
   echo "Make sure you are signed into hub.";
+fi
+
+
+# Check if user is in interactive mode,
+# likely using this script for the first time.
+if [[ "$-" != "${-#*i}" ]]; then
+  echo "This shell is not interactive, exiting."
+else
+  # Propose Github add-ons.
+  ./common-installs/github_tools.sh
+
+  # Propose Mac apps and packages.
+  if [ "$(uname)" == "Darwin" ]; then
+    ./common-installs/mac_setup.sh
+  fi
 fi

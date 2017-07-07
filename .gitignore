@@ -7,3 +7,7 @@
 
 # Mac tmp files
 .DS_Store
+
+# Github tools.
+bin/.git-prompt.sh
+bin/.git-completion.sh
