@@ -65,21 +65,32 @@ add_to_shellrc 'bin' "if [[ \":\$PATH:\" != *\":$DIR/bin:\"* ]]; then export PAT
 # Install manuals.
 add_to_shellrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" != *\":$DIR/man:\"* ]]; then export MANPATH=\"\$MANPATH:$DIR/man\"; fi"
 
+
 # Install hub.
-HUB_VERSION="2.3.0-pre8"
+HUB_VERSION="2.3.0-pre10"
 if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.* //")" != "${HUB_VERSION}" ]; then
 
   if [ "$(uname)" == "Darwin" ]; then
     HUB_PLATFORM="darwin-amd64"
+    # Check if Homebrew is installed.
+    echo “Install or update Homebrew.”
+    which -s brew
+    if [[ $? != 0 ]] ; then
+      # Install Homebrew
+      /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+      brew update
+    fi
+    brew install wget
   fi
   if [ "$(uname)" == "Linux" ] && [ "$(uname -p)" == "x86_64" ]; then
     HUB_PLATFORM="linux-amd64"
+    apt-get install wget
   fi
 
   if [ -n "${HUB_PLATFORM}" ]; then
     if [ "${HUB_PLATFORM}" == "darwin-amd64" ]; then
       wget "https://github.com/github/hub/releases/download/v${HUB_VERSION}/hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz"
-      tar -zxf hub-darwin-amd64-2.3.0-pre8.tgz -C "${DIR}" --strip-components 1 hub-darwin-amd64-2.3.0-pre8/bin
+      tar -zxf "hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz" -C "${DIR}" --strip-components 1 "hub-${HUB_PLATFORM}-${HUB_VERSION}"/bin
     else
       wget "https://github.com/github/hub/releases/download/v${HUB_VERSION}/hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz" -O - | \
         tar xz -C "${DIR}" --strip-components 1 "hub-${HUB_PLATFORM}-${HUB_VERSION}/bin" -C "${DIR}" --strip-components 1
@@ -99,4 +110,33 @@ if [ "$(hub ci-status)" == "success" ]; then
   echo "Hub is setup successfully.";
 else
   echo "Make sure you are signed into hub.";
+fi
+
+# Propose additional packages for Mac users.
+if [ "${HUB_PLATFORM}" == "darwin-amd64" ]; then
+      read -p "We noticed that you are using Mac. Would you like to add some useful packages with Homebrew? " -n 1 -r
+      echo # Add a blank line.
+    if [[ $REPLY =~ ^[Yy]$ ]]
+    then
+        ./common-installs/mac_setup.sh
+    fi
+fi
+
+# Propose useful github addons.
+read -p "Would you like to add git-completion and git-prompt, two useful git tools? " -n 1 -r
+echo # Add a blank line.
+if [[ $REPLY =~ ^[Yy]$ ]]
+then
+    if grep -F "git-completion" ~/.bash_profile
+    then
+      echo 'Looks like these tools are arleady installed !'
+    else
+      curl https://raw.githubusercontent.com/git/git/master/contrib/completion/git-completion.bash > ~/.git-completion.sh
+      curl https://raw.githubusercontent.com/git/git/master/contrib/completion/git-prompt.sh > ~/.git-prompt.sh
+      echo '# Git tools.' >>~/.bash_profile
+      echo 'source ~/.git-completion.sh' >>~/.bash_profile
+      echo 'source ~/.git-prompt.sh' >>~/.bash_profile
+      echo "export PS1='\[\033[0;94m\]\W $(__git_ps1 " (%s)")$ \[\033[0m\]'" >>~/.bash_profile
+      source ~/.bash_profile
+    fi
 fi
