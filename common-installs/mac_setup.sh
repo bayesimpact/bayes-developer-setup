@@ -14,7 +14,8 @@ fi
 ## Mac apps.
 echo "Here is a list of useful apps."
 declare -a arr=("google-chrome"
-                "docker"  
+                "docker"
+                "1password"  
                 "firefox"
                 "mou"
                 "slack"
