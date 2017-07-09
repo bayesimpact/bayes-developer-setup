@@ -3,17 +3,19 @@
 touch ~/.bashrc
 touch ~/.bash_profile
 
-# Install Xcode.
-if [[ "$(xcode-select -p)" ]]; then
-  echo 'Xcode is already installed.' >&2
-else
-  echo 'Installing Xcode.' >&2
-  xcode-select --install
+# Check if Homebrew is installed.
+echo 'Install or update Homebrew.'
+which -s brew
+if [[ $? != 0 ]]; then
+  # Install Homebrew.
+  /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+  brew update
 fi
 
 ## Mac apps.
 echo "Here is a list of useful apps."
-declare -a arr=("google-chrome"
+declare -a arr=("xcode"
+                "google-chrome"
                 "docker"
                 "1password"  
                 "firefox"
@@ -34,21 +36,25 @@ for i in "${arr[@]}"
 do
     read -p "Would you like to install $i? " -n 1 -r
     echo # Add a blank line.
-    if [[ $REPLY =~ ^[Yy]$ ]]
-    then
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
         brew cask install $i
-        if [[ $i == "postgres" ]]
-        then
-            echo 'export PATH="~/Applications/Postgres.app/Contents/Versions/latest/bin/:$PATH"' >> ~/.bash_profile
-        elif [[ $i == "sublime-text" ]]
-        then
+        if [[ $i == "xcode" ]]; then
+          # Install Xcode.
+          if [[ "$(xcode-select -p)" ]]; then
+            echo 'Xcode is already installed.' >&2
+          else
+            echo 'Installing Xcode.' >&2
+            xcode-select --install
+          fi
+        elif [[ $i == "postgres" ]]; then
+          echo 'export PATH="~/Applications/Postgres.app/Contents/Versions/latest/bin/:$PATH"' >> ~/.bash_profile
+        elif [[ $i == "sublime-text" ]]; then
           echo 'We are in the right place.'
           alias subl="/Applications/Sublime\ Text.app/Contents/SharedSupport/bin/subl"
           echo 'subl is now an alias for sublime-text !'
           read -p "Would you like to make sublime your default git editor? " -n 1 -r
           echo # Add a blank line.
-          if [[ $REPLY =~ ^[Yy]$ ]]
-          then
+          if [[ $REPLY =~ ^[Yy]$ ]]; then
             git config --global core.editor '"/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl" -w'
           fi
         fi
@@ -68,12 +74,10 @@ declare -a arr=("wget"
                 )
 
 ## Loop through packages.
-for i in "${arr[@]}"
-do
-   read -p "Would you like to install $i? " -n 1 -r
-   echo # Add a blank line.
-if [[ $REPLY =~ ^[Yy]$ ]]
-then
-    brew install "$i"
+for i in "${arr[@]}"; do
+  read -p "Would you like to install $i? " -n 1 -r
+  echo # Add a blank line.
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+  brew install "$i"
 fi
 done
