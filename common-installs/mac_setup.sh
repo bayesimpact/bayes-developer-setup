@@ -29,22 +29,23 @@ fi
 
 ## Mac apps.
 echo "Here is a list of suggested apps."
-declare -a apps=("xcode"
-                "google-chrome"
-                "docker"
-                "sublime-text"
+declare -a apps=(
                 "1password"  
+                "docker"
                 "firefox"
-                "mou"
-                "slack"
+                "gephi"
+                "google-chrome"
                 "hipchat"
                 "iterm2"
-                "xquartz"
-                "virtual-box"
-                "postgres"
-                "pgadmin3"
-                "gephi"
                 "java"
+                "mou"
+                "pgadmin3"
+                "postgres"
+                "slack"
+                "sublime-text"
+                "virtual-box"
+                "xcode"
+                "xquartz"
                 )
 
 ## Loop through apps.
@@ -78,13 +79,14 @@ done
 
 ## Mac packages.
 echo "Here is a list of useful packages."
-declare -a packages=("wget" 
-                "mongodb"
-                "graphviz"
-                "imagemagick"
-                "terminal-notifier"
-                "gcc"
-                )
+declare -a packages=(
+                    "gcc"
+                    "graphviz"
+                    "imagemagick"
+                    "mongodb"
+                    "terminal-notifier"
+                    "wget" 
+                    )
 
 ## Loop through packages.
 for package in "${packages[@]}"; do
