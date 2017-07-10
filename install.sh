@@ -67,7 +67,7 @@ add_to_shellrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" !=
 
 
 # Install hub.
-HUB_VERSION="2.3.0-pre10"
+HUB_VERSION="2.3.0-pre8"
 if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.* //")" != "${HUB_VERSION}" ]; then
 
   if [ "$(uname)" == "Darwin" ]; then
@@ -94,6 +94,7 @@ if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.
   fi
 fi
 
+
 # Check if the user is logged in.
 if [ "$(hub ci-status)" == "success" ]; then
   echo "Hub is setup successfully.";
@@ -101,28 +102,17 @@ else
   echo "Make sure you are signed into hub.";
 fi
 
-# Propose additional packages for Mac users.
-if [ "${HUB_PLATFORM}" == "darwin-amd64" ]; then
-  read -p "We noticed that you are using Mac. Would you like to add some useful packages with Homebrew? " -n 1 -r
-  echo # Add a blank line.
-  if [[ $REPLY =~ ^[Yy]$ ]]; then
-    ./common-installs/mac_setup.sh
-  fi
-fi
 
-# Propose useful github addons.
-read -p "Would you like to add git-completion and git-prompt, two useful git tools? " -n 1 -r
-echo # Add a blank line.
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-  if grep -F "git-completion" ~/.bash_profile; then
-    echo 'Looks like these tools are arleady installed !'
-  else
-    curl https://raw.githubusercontent.com/git/git/master/contrib/completion/git-completion.bash > ~/.git-completion.sh
-    curl https://raw.githubusercontent.com/git/git/master/contrib/completion/git-prompt.sh > ~/.git-prompt.sh
-    echo '# Git tools.' >>~/.bash_profile
-    echo 'source ~/.git-completion.sh' >>~/.bash_profile
-    echo 'source ~/.git-prompt.sh' >>~/.bash_profile
-    echo "export PS1='\[\033[0;94m\]\W $(__git_ps1 " (%s)")$ \[\033[0m\]'" >>~/.bash_profile
-    source ~/.bash_profile
+# Check if user is in interactive mode,
+# likely using this script for the first time.
+if [[ "$-" != "${-#*i}" ]]; then
+  echo "This shell is not interactive, exiting."
+else
+  # Propose Github add-ons.
+  ./common-installs/github_tools.sh
+
+  # Propopse Mac apps and packages.
+  if [ "$(uname)" == "Darwin" ]; then
+    ./common-installs/mac_setup.sh
   fi
 fi

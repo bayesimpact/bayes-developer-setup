@@ -1,7 +1,22 @@
 #!/usr/bin/env bash
+#
+# A script to install a list of suggested apps and packages for Mac users.
 
 touch ~/.bashrc
 touch ~/.bash_profile
+
+
+# Propose additional packages for Mac users.
+if [ "$(uname)" == "Darwin" ]; then
+  read -p "We noticed that you are using Mac. Would you like to add some useful packages with Homebrew? " -n 1 -r
+  echo # Add a blank line.
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    ./common-installs/mac_setup.sh
+  fi
+else
+  echo "Sorry, Homebrew is only available for Mac users."
+  exit
+fi
 
 # Check if Homebrew is installed.
 echo 'Install or update Homebrew.'
@@ -13,8 +28,8 @@ if [[ $? != 0 ]]; then
 fi
 
 ## Mac apps.
-echo "Here is a list of useful apps."
-declare -a arr=("xcode"
+echo "Here is a list of suggested apps."
+declare -a apps=("xcode"
                 "google-chrome"
                 "docker"
                 "1password"  
@@ -32,13 +47,12 @@ declare -a arr=("xcode"
                 )
 
 ## Loop through apps.
-for i in "${arr[@]}"
-do
-    read -p "Would you like to install $i? " -n 1 -r
+for app in "${apps[@]}"; do
+    read -p "Would you like to install $app? " -n 1 -r
     echo # Add a blank line.
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        brew cask install $i
-        if [[ $i == "xcode" ]]; then
+        brew cask install $app
+        if [[ $app == "xcode" ]]; then
           # Install Xcode.
           if [[ "$(xcode-select -p)" ]]; then
             echo 'Xcode is already installed.' >&2
@@ -46,9 +60,9 @@ do
             echo 'Installing Xcode.' >&2
             xcode-select --install
           fi
-        elif [[ $i == "postgres" ]]; then
+        elif [[ $app == "postgres" ]]; then
           echo 'export PATH="~/Applications/Postgres.app/Contents/Versions/latest/bin/:$PATH"' >> ~/.bash_profile
-        elif [[ $i == "sublime-text" ]]; then
+        elif [[ $app == "sublime-text" ]]; then
           echo 'We are in the right place.'
           alias subl="/Applications/Sublime\ Text.app/Contents/SharedSupport/bin/subl"
           echo 'subl is now an alias for sublime-text !'
@@ -61,11 +75,9 @@ do
     fi
 done
 
-
 ## Mac packages.
 echo "Here is a list of useful packages."
-
-declare -a arr=("wget" 
+declare -a packages=("wget" 
                 "mongodb"
                 "graphviz"
                 "imagemagick"
@@ -74,10 +86,12 @@ declare -a arr=("wget"
                 )
 
 ## Loop through packages.
-for i in "${arr[@]}"; do
-  read -p "Would you like to install $i? " -n 1 -r
-  echo # Add a blank line.
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-  brew install "$i"
-fi
+for package in "${packages[@]}"; do
+  if ! which $package > /dev/null; then
+    read -p "Would you like to install $package? " -n 1 -r
+    echo # Add a blank line.
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      brew install "$package"
+    fi
+  fi
 done
