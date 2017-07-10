@@ -59,6 +59,9 @@ function add_to_shellrc {
   echo "${line}${marker}" >> "${SHELLRC}"
 }
 
+# Specify script source
+echo '# bayes-developer-setup.' >> $SHELLRC
+
 # Install binaries.
 add_to_shellrc 'bin' "if [[ \":\$PATH:\" != *\":$DIR/bin:\"* ]]; then export PATH=\"\$PATH:$DIR/bin\"; fi"
 
