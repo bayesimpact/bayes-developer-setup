@@ -2,6 +2,8 @@
 #
 # A script to install a list of suggested apps and packages for Mac users.
 
+# TODO - Queue answers before install.
+
 touch ~/.bashrc
 touch ~/.bash_profile
 
@@ -10,8 +12,8 @@ touch ~/.bash_profile
 if [ "$(uname)" == "Darwin" ]; then
   read -p "We noticed that you are using Mac. Would you like to add some useful packages with Homebrew? " -n 1 -r
   echo # Add a blank line.
-  if [[ $REPLY =~ ^[Yy]$ ]]; then
-    ./common-installs/mac_setup.sh
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    exit
   fi
 else
   echo "Sorry, Homebrew is only available for Mac users."
@@ -28,6 +30,7 @@ if [[ $? != 0 ]]; then
 fi
 
 ## Mac apps.
+# TODO - Add more context about each app.
 echo "Here is a list of suggested apps."
 declare -a apps=(
                 "1password"  
@@ -78,6 +81,7 @@ for app in "${apps[@]}"; do
 done
 
 ## Mac packages.
+# TODO - Add more context about each package.
 echo "Here is a list of useful packages."
 declare -a packages=(
                     "gcc"
