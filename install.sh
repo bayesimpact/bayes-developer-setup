@@ -114,7 +114,7 @@ else
   # Propose Github add-ons.
   ./common-installs/github_tools.sh
 
-  # Propopse Mac apps and packages.
+  # Propose Mac apps and packages.
   if [ "$(uname)" == "Darwin" ]; then
     ./common-installs/mac_setup.sh
   fi
