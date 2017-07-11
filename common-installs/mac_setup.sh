@@ -53,31 +53,35 @@ declare -a apps=(
 
 ## Loop through apps.
 for app in "${apps[@]}"; do
+  if [[ $(system_profiler SPApplicationsDataType | grep -i $app) ]]; then
+    echo "$app is already installed."
+  else
     read -p "Would you like to install $app? " -n 1 -r
     echo # Add a blank line.
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        brew cask install $app
-        if [[ $app == "xcode" ]]; then
-          # Install Xcode.
-          if [[ "$(xcode-select -p)" ]]; then
-            echo 'Xcode is already installed.' >&2
-          else
-            echo 'Installing Xcode.' >&2
-            xcode-select --install
-          fi
-        elif [[ $app == "postgres" ]]; then
-          echo 'export PATH="~/Applications/Postgres.app/Contents/Versions/latest/bin/:$PATH"' >> ~/.bash_profile
-        elif [[ $app == "sublime-text" ]]; then
-          echo 'We are in the right place.'
-          alias subl="/Applications/Sublime\ Text.app/Contents/SharedSupport/bin/subl"
-          echo 'subl is now an alias for sublime-text !'
-          read -p "Would you like to make sublime your default git editor? " -n 1 -r
-          echo # Add a blank line.
-          if [[ $REPLY =~ ^[Yy]$ ]]; then
-            git config --global core.editor '"/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl" -w'
-          fi
+      brew cask install $app
+      if [[ $app == "xcode" ]]; then
+        # Install Xcode.
+        if [[ "$(xcode-select -p)" ]]; then
+          echo 'Xcode is already installed.' >&2
+        else
+          echo 'Installing Xcode.' >&2
+          xcode-select --install
         fi
+      elif [[ $app == "postgres" ]]; then
+        echo 'export PATH="~/Applications/Postgres.app/Contents/Versions/latest/bin/:$PATH"' >> ~/.bash_profile
+      elif [[ $app == "sublime-text" ]]; then
+        echo 'We are in the right place.'
+        alias subl="/Applications/Sublime\ Text.app/Contents/SharedSupport/bin/subl"
+        echo 'subl is now an alias for sublime-text !'
+        read -p "Would you like to make sublime your default git editor? " -n 1 -r
+        echo # Add a blank line.
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+          git config --global core.editor '"/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl" -w'
+        fi
+      fi
     fi
+  fi
 done
 
 ## Mac packages.
