@@ -70,7 +70,7 @@ add_to_shellrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" !=
 
 
 # Install hub.
-HUB_VERSION="2.3.0-pre8"
+HUB_VERSION="2.3.0-pre10"
 if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.* //")" != "${HUB_VERSION}" ]; then
 
   if [ "$(uname)" == "Darwin" ]; then
@@ -81,7 +81,7 @@ if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.
   fi
   if [ -n "${HUB_PLATFORM}" ]; then
     if [ "${HUB_PLATFORM}" == "darwin-amd64" ]; then
-      curl -O "https://github.com/github/hub/releases/download/v${HUB_VERSION}/hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz"
+      curl -O -L "https://github.com/github/hub/releases/download/v${HUB_VERSION}/hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz"
       tar -zxf "hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz" -C "${DIR}" --strip-components 1 "hub-${HUB_PLATFORM}-${HUB_VERSION}"/bin
     else
       wget "https://github.com/github/hub/releases/download/v${HUB_VERSION}/hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz" -O - | \
