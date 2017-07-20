@@ -97,20 +97,19 @@ if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.
   fi
 fi
 
-
-# Check if the user is logged in.
-if [ "$(hub ci-status)" == "success" ]; then
-  echo "Hub is setup successfully.";
-else
-  echo "Make sure you are signed into hub.";
-fi
-
-
 # Check if user is in interactive mode,
 # likely using this script for the first time.
 if [[ "$-" != "${-#*i}" ]]; then
   echo "This shell is not interactive, exiting."
 else
+  # Check if the user is logged in.
+  echo "Checking hub setup."
+  hub ci-status
+  if [ "$(hub ci-status)" == "success" ]; then
+    echo "Hub is setup successfully.";
+  else
+    echo "Make sure you are signed into hub.";
+  fi
   # Propose Github add-ons.
   ./common-installs/github_tools.sh
 
