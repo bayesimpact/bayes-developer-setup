@@ -4,7 +4,11 @@ Tools, files, and other necessary things to get your machine configured for work
 ## Install
 
 You can install this tool without downloading the repo yourself by downloading and
-running `install.sh` (no need to clone the repo yourself). Test your installation by verifying that hub was installed correctly.
+running `install.sh` (no need to clone the repo yourself). Or simply run the following command: 
+	
+	sudo curl -s https://raw.githubusercontent.com/bayesimpact/bayes-developer-setup/master/install.sh | bash
+
+Test your installation by verifying that hub was installed correctly.
 Running `which hub` should return something like "~/.bayes-developer-setup/bin/hub".
 
 ### Common Errors
