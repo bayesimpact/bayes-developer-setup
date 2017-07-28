@@ -4,7 +4,13 @@ Tools, files, and other necessary things to get your machine configured for work
 ## Install
 
 You can install this tool without downloading the repo yourself by downloading and
-running `install.sh` (no need to clone the repo yourself). Test your installation by verifying that hub was installed correctly.
+running `install.sh` (no need to clone the repo yourself). Or simply run the following command: 
+
+```
+sudo curl -s https://raw.githubusercontent.com/bayesimpact/bayes-developer-setup/master/install.sh | bash
+```
+
+Test your installation by verifying that hub was installed correctly.
 Running `which hub` should return something like "~/.bayes-developer-setup/bin/hub".
 
 ### Common Errors
@@ -12,12 +18,14 @@ Running `which hub` should return something like "~/.bayes-developer-setup/bin/h
 Hub is not found: This script will automatically write the necessary updates to your .bashrc file. If you use a different file (e.g. .bash_profile) you will need to set up your .bash_profile to read from your .bashrc.
 
 To do this, add the follwing to your .bash_profile:
+
 ```
 if [ -f ~/.bashrc ]; then
    source ~/.bashrc
 fi
 
 ```
+
 then run `source ~/.bash_profile` to update. 
 
 
