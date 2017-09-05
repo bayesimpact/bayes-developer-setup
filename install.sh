@@ -64,6 +64,7 @@ add_to_shellrc 'installation.' ''
 
 # Install binaries.
 add_to_shellrc 'bin' "if [[ \":\$PATH:\" != *\":$DIR/bin:\"* ]]; then export PATH=\"\$PATH:$DIR/bin\"; fi"
+export PATH="$PATH:$DIR/bin"
 
 # Install manuals.
 add_to_shellrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" != *\":$DIR/man:\"* ]]; then export MANPATH=\"\$MANPATH:$DIR/man\"; fi"
