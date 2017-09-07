@@ -17,12 +17,6 @@ if [ "${BRANCH}" == "master" ]; then
   exit 1
 fi
 
-# Ensures that there are no invalid characters (i.e "#"") in branch name
-if [ -n grep "#" <<< "${BRANCH}" ]; then
-  echo "# character is not allowed in branch name:" 1>&2
-  exit 1
-fi
-
 # Ensures that current dir is clean.
 if [ -n "$(git diff HEAD --shortstat 2> /dev/null | tail -n1)" ]; then
   echo "Current git status is dirty. Commit, stash or revert your changes before sending for review." 1>&2
@@ -45,7 +39,8 @@ else
     echo "  git config user.email <me@bayesimpact.org>" 1>&2
     exit 5
   fi
-  readonly REMOTE_BRANCH="${USERNAME}-${BRANCH}"
+  # Ensures that there are no invalid characters (i.e "#"") in remote branch name
+  readonly REMOTE_BRANCH=$(sed -e "s/#//" <<< "${USERNAME}-${BRANCH}")
 fi
 git push ${FORCE_PUSH} -u "${REMOTE_REPO}" "${BRANCH}:${REMOTE_BRANCH}"
 
