@@ -18,8 +18,9 @@ if [ "${BRANCH}" == "master" ]; then
 fi
 
 # Ensures that there are no invalid characters (i.e "#"") in branch name
-if [ -n grep "#" <<< "${BRANCH}" ]; then
-  echo "# character is not allowed in branch name:" 1>&2
+if [ -n "$(grep "#" <<< "${BRANCH}")" ]; then
+  echo "invalid character: # in branch name:" 1>&2
+  git branch | grep -v \ master$ 1>&2
   exit 1
 fi
 
