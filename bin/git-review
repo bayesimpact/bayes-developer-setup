@@ -29,19 +29,22 @@ if [ -z "$(git diff $(git merge-base HEAD "${BASE_BRANCH}") --shortstat 2> /dev/
   exit 4
 fi
 
+# Ensures that there are no invalid characters (e.g. "#", "é") in remote branch name.
+function cleanup_branch_name {
+  sed -e "s/#//g" <<< "$1" | iconv -f utf8 -t ascii//TRANSLIT
+}
+
 readonly USERNAME=$(git config user.email | sed -e "s/@.*$//")
 readonly EXISTING_REMOTE_BRANCH=$(git config "branch.${BRANCH}.merge" | sed -e "s/refs.heads.//")
 if [ -n "${EXISTING_REMOTE_BRANCH}" ]  && [ "${EXISTING_REMOTE_BRANCH}" != "master" ]; then
-  # Ensures that there are no invalid characters (i.e "#"") in remote branch name
-  readonly REMOTE_BRANCH=$(sed -e "s/#//" <<< "${EXISTING_REMOTE_BRANCH}")
+  readonly REMOTE_BRANCH="${EXISTING_REMOTE_BRANCH}"
 else
   if [ -z "${USERNAME}" ]; then
     echo "Could not find username, most probably you need to setup an email with:" 1>&2
     echo "  git config user.email <me@bayesimpact.org>" 1>&2
     exit 5
   fi
-  # Ensures that there are no invalid characters (i.e "#"") in remote branch name
-  readonly REMOTE_BRANCH=$(sed -e "s/#//" <<< "${USERNAME}-${BRANCH}")
+  readonly REMOTE_BRANCH=$(cleanup_branch_name "${USERNAME}-${BRANCH}")
 fi
 git push ${FORCE_PUSH} -u "${REMOTE_REPO}" "${BRANCH}:${REMOTE_BRANCH}"
 
