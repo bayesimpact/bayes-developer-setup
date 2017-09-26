@@ -10,3 +10,29 @@ services:
     build:
       context: reviewable
       dockerfile: Dockerfile
+  lambda-reviewable-to-slack-test:
+    build:
+      context: lambda-reviewable-to-slack
+      dockerfile: Dockerfile.test
+    volumes:
+      - ./lambda-reviewable-to-slack/lint_and_test.sh:/test/lint_and_test.sh:ro
+      - ./lambda-reviewable-to-slack/reviewable_to_slack.py:/test/reviewable_to_slack.py:ro
+      - ./lambda-reviewable-to-slack/reviewable_to_slack_test.py:/test/reviewable_to_slack_test.py:ro
+      - ./lambda-reviewable-to-slack/github_notification_payload_example.json:/test/github_notification_payload_example.json:ro
+      - ./.pylintrc:/test/.pylintrc:ro
+      - ./.pep8:/test/.pep8:ro
+    environment:
+      GITHUB_PERSONAL_ACCESS_TOKEN:
+    tty: true
+  lambda-reviewable-to-slack-deploy:
+    build:
+      context: lambda-reviewable-to-slack
+      dockerfile: Dockerfile.deploy
+    volumes:
+      - ./lambda-reviewable-to-slack/reviewable_to_slack.py:/var/task/reviewable_to_slack.py:ro
+      - ./lambda-reviewable-to-slack/zappa_settings.json:/var/task/zappa_settings.json:ro
+    environment:
+      AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+      AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+      AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION
+    tty: true

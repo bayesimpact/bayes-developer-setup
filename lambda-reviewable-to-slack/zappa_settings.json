@@ -1,0 +1,7 @@
+{
+    "dev": {
+        "app_function": "reviewable_to_slack.app",
+        "s3_bucket": "lambda-reviewable-to-slack-repo",
+        "runtime": "python3.6"
+    }
+}
