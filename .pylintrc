@@ -1,0 +1,17 @@
+[REPORTS]
+output=colorized
+disable=I,R
+reports=no
+
+[MISCELLANEOUS]
+notes=FIXME,XXX
+string-quote=single-avoid-escape
+
+[VARIABLES]
+dummy-variables-rgx=unused_.*
+
+[DESIGN]
+ignored-argument-names=unused_.*
+
+# Override default regex to allow long method names in tests.
+method-rgx=([a-z_][a-z0-9_]{4,40}|test_[a-z0-9_]+)$
