@@ -1,0 +1,8 @@
+FROM python:3
+
+WORKDIR /test
+COPY ./requirements.txt ./requirements.txt
+COPY ./requirements-test.txt ./requirements-test.txt
+RUN pip install -r ./requirements-test.txt
+
+CMD '/bin/bash'
