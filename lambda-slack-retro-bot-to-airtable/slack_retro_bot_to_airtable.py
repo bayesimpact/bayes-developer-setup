@@ -199,6 +199,10 @@ def _add_retrospective_item_and_get_response(category, item_object, user_name):
             _BOT_NAME, item_object)
 
     item_object = item_object.capitalize()
+    if not item_object:
+        return 'Oops, you forgot to tell what was *{}*!'.format(category)
+
+    item_object = item_object[0].upper() + item_object[1:]
     category = category.lower()
 
     existing_item = _AIRTABLE_CLIENT.get(
