@@ -2,7 +2,7 @@
 
 set -e
 
-readonly SHELL="/bin/bash"
+export SHELL="/bin/bash"
 pipenv shell
 
 $@

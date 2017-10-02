@@ -21,11 +21,13 @@ _GITHUB_TO_SLACK_LOGIN = {
     'pyduan': 'paul',
 }
 _ERROR_SLACK_CHANNEL = '@florian'
+# The following variable is used for development, to check what messages are sent to all users.
+_REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL = os.getenv('REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL')
 
 app = flask.Flask(__name__)  # pylint: disable=invalid-name
 
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
     """Health check endpoint."""
     return '''Integration to send Reviewable updates to Slack.
@@ -40,18 +42,30 @@ def handle_github_notification():
     slack_messages = generate_slack_messages(github_notification)
     # TODO(florian): Call Slack directly
     zapier_to_slack_endpoint = 'https://hooks.zapier.com/hooks/catch/1946029/iy46wx/'
+    zapier_slack_payloads = []
+    if _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL:
+        # To debug the integration, send only one message will all the info to the channel used
+        # to test.
+        all_messages_in_one = 'Messages from Reviewable:\n' + ('\n\n'.join([
+            'To {}:\n{}'.format(slack_channel, slack_message)
+            for slack_channel, slack_message in slack_messages.items()
+        ]) if slack_messages else 'None')
+        zapier_slack_payloads = [{
+            'slack_channel': _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL,
+            'slack_message': all_messages_in_one,
+        }]
+    else:
+        zapier_slack_payloads = [
+            {'slack_channel': slack_channel, 'slack_message': slack_message}
+            for slack_channel, slack_message in slack_messages.items()
+        ]
 
-    for slack_channel, slack_message in slack_messages.items():
-        response = requests.post(zapier_to_slack_endpoint, json={
-            # TODO(florian): For now I just send the Slack messages to me to check they would
-            # work great but later this would go to the real target user.
-            'slack_channel': '@florian',
-            'slack_message': 'To {}:\n{}'.format(slack_channel, slack_message)
-        })
+    for zapier_slack_payload in zapier_slack_payloads:
+        response = requests.post(zapier_to_slack_endpoint, json=zapier_slack_payload)
         if response.status_code != 200:
             flask.abort(500, message='Error with Slack:\n{} {}'.format(
                 response.status_code, response.text))
-    return 'Messages for Slack:\n{}'.format(pprint.pformat(slack_messages))
+    return 'Messages for Slack:\n{}'.format(pprint.pformat(zapier_slack_payloads))
 
 
 class ReviewableEvent(enum.Enum):
