@@ -1,7 +1,7 @@
 """Integration to send Slack messages when new code reviews are sent in Reviewable."""
 import enum
 import json
-import pprint
+import itertools
 import os
 import re
 import traceback
@@ -38,9 +38,22 @@ def index():
 @app.route('/handle_github_notification', methods=['POST'])
 def handle_github_notification():
     """Receives a Github webhook notification and handles it to potentially ping devs on Slack."""
+    github_event_type = flask.request.headers.get('X-GitHub-Event')
     github_notification = json.loads(flask.request.data)
-    slack_messages = generate_slack_messages(github_notification)
-    # TODO(florian): Call Slack directly
+    try:
+        slack_messages = generate_slack_messages(github_event_type, github_notification)
+        status_code = 200
+    except NotEnoughDataException as err:
+        # We could not figure out what issue to send updates about, so we do a noop.
+        slack_messages = {}
+        status_code = 200
+    except Exception as err:  # pylint: disable=broad-except
+        slack_messages = {
+            _ERROR_SLACK_CHANNEL:
+                'Error: {}\n\n{}\n'.format(err, traceback.format_exc())
+        }
+        status_code = 500
+    # TODO(florian): Call Slack directly.
     zapier_to_slack_endpoint = 'https://hooks.zapier.com/hooks/catch/1946029/iy46wx/'
     zapier_slack_payloads = []
     if _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL:
@@ -65,7 +78,7 @@ def handle_github_notification():
         if response.status_code != 200:
             flask.abort(500, message='Error with Slack:\n{} {}'.format(
                 response.status_code, response.text))
-    return 'Messages for Slack:\n{}'.format(pprint.pformat(zapier_slack_payloads))
+    return json.dumps(zapier_slack_payloads), status_code
 
 
 class ReviewableEvent(enum.Enum):
@@ -91,7 +104,12 @@ class SetupException(Exception):
     pass
 
 
-class RequestException(Exception):
+class NotEnoughDataException(Exception):
+    """Exception when the github notification data does not tell us what issue it is about."""
+    pass
+
+
+class ExecutionException(Exception):
     """Exception to warn about communication issue with Github, Zappier or Slack."""
     pass
 
@@ -106,9 +124,12 @@ _REVIEWABLE_COMMENT_REGEX = re.compile(
     re.MULTILINE)
 _REVIEWABLE_INLINE_COMMENT_LINK_REGEX = re.compile(r'https://reviewable\.io[^)]+', re.MULTILINE)
 _REVIEWABLE_ASSIGN_REGEX = re.compile(r'\+@([\w]+)\b', re.MULTILINE)
-_REVIEWABLE_DEMO_REGEX = re.compile(r'.*(Demo ready for review|No demo to review)', re.MULTILINE)
 _REVIEWABLE_HTML_EMOJI_REGEX = re.compile(r'<img class="emoji" title="([^"]+)"[^>]*>')
-_REVIEWABLE_LGTM_REGEX = re.compile(r'.*:lgtm(_strong)?:', re.MULTILINE)
+# From:    https://reviewable.io/reviews/bayesimpact/bob-emploi/5750
+# Extract: repo: bayesimpact/bob-emploi
+#          issue_number: 5750
+_REVIEWABLE_URL_ISSUE_REGEX = re.compile(
+    r'https://reviewable.io/reviews/(?P<repo>[^/]+/[^/]+)/(?P<issue_number>\d+)')
 _GITHUB_REPO_NAME_REGEX = re.compile(r'^https://api.github.com/repos/(.*)$')
 
 _EVENT_SLACK_TEMPLATES = {
@@ -128,52 +149,113 @@ _CALL_TO_ACTION_TEMPLATES = {
 }
 
 
-def generate_slack_messages(github_notification):
+def generate_slack_messages(github_event_type, github_notification):
     """Generate all the messages to send on Slack to respond to a Github notification."""
-    action = github_notification.get('action')
-    issue = github_notification.get('issue')
-    new_comment = github_notification.get('comment')
-    # We deal only with new comments notifications.
-    if action != 'created' or not issue or not new_comment:
+    if github_event_type == 'issue_comment':
+        github_resources = _get_all_resources_for_issue_comment_event(github_notification)
+    elif github_event_type == 'status':
+        # Ignore 'pending' status as we want to send notification for finishing, not for
+        # starting ci pipeline.
+        # if github_notification['state'] == 'pending':
+            # return {}
+        github_resources = _get_all_resources_for_status_event(github_notification)
+    else:
+        # We deal only with new comments and new ci/code review status notifications.
         return {}
-
-    try:
-        return _generate_slack_messages_for_new_comment(issue, new_comment)
-    except Exception as err:  # pylint: disable=broad-except
-        return {
-            _ERROR_SLACK_CHANNEL:
-                'Error: {}\n\n{}\nWhen processing Github notification:\n{}'.format(
-                    err,
-                    traceback.format_exc(),
-                    pprint.pformat(github_notification))
-        }
+    return _generate_slack_messages_for_new_status_or_comment(*github_resources)
 
 
-def _generate_slack_messages_for_new_comment(issue, new_comment):
-    """Get all data we need to decide what messages to generate."""
-    # Note: new_comment is included in comments.
+def _get_all_resources_for_issue_comment_event(github_notification):
+    """Fetch on Github API resources that are missing in the 'issue_comment' notification."""
+    issue = github_notification['issue']
+
+    statuses = _get_statuses_for_issue(issue)
+    new_status = None
     comments = _get_github_api_ressource(issue['comments_url'])
+    new_comment = github_notification['comment']
+    return issue, statuses, new_status, comments, new_comment
+
+
+def _get_all_resources_for_status_event(github_notification):
+    """Fetch on Github API resources that are missing in the 'status' notification."""
+    # Unfortunately 'status' event don't contain 'issue' data, so we need to fetch it.
+    new_status = github_notification
+    if new_status['context'].startswith('code-review/reviewable'):
+        repo_and_issue_number =\
+            _REVIEWABLE_URL_ISSUE_REGEX.match(github_notification['target_url']).groupdict()
+        issue_url = 'https://api.github.com/repos/{repo}/issues/{issue_number}'.format(
+            **repo_and_issue_number)
+        issue = _get_github_api_ressource(issue_url)
+        statuses = _get_statuses_for_issue(issue)
+    elif new_status['context'].startswith('ci/circleci'):
+        # It's really annoying, status events from CircleCI don't have any reference to the issue
+        # number. We can try our chance by looking at 'statuses' which are accessible with the
+        # commit sha, which we have. We can then look in the statuses if there are any status events
+        # from Reviewable which have a referece to the issue number.
+        sha = new_status['sha']
+
+        statuses_url = new_status['repository']['statuses_url'].format(sha=sha)
+        statuses = _get_github_api_ressource(statuses_url)
+        reviewable_status = next((
+            status for status in statuses
+            if status['context'].startswith('code-review/reviewable')), None)
+        if not reviewable_status:
+            raise NotEnoughDataException(
+                'Could not find any Reviewable status, '
+                'we have no way to figure out the issue number')
+        repo_and_issue_number =\
+            _REVIEWABLE_URL_ISSUE_REGEX.match(reviewable_status['target_url']).groupdict()
+        issue_url = 'https://api.github.com/repos/{repo}/issues/{issue_number}'.format(
+            **repo_and_issue_number)
+        issue = _get_github_api_ressource(issue_url)
+    else:
+        raise ExecutionException(
+            "Does not support '{}' status context".format(new_status['context']))
+
+    comments = _get_github_api_ressource(issue['comments_url'])
+    new_comment = None
+    return issue, statuses, new_status, comments, new_comment
+
+
+def _get_statuses_for_issue(issue):
+    pull_request_url = issue['pull_request']['url']
+    pull_request = _get_github_api_ressource(pull_request_url)
+    statuses_url = pull_request['_links']['statuses']['href']
+    statuses = _get_github_api_ressource(statuses_url)
+    return statuses
+
+
+def _generate_slack_messages_for_new_status_or_comment(
+        issue,
+        statuses,
+        new_status,
+        comments,
+        new_comment):
+    """Prepare all data we need to decide what messages to generate."""
+    # Note: new_comment is included in comments, and new_status in statuses.
     issue_owner = issue['user']['login']
 
     assignees = {assignee['login'] for assignee in issue['assignees']}
     # Remove the owner from the assignees if for some reason they self-assigned. This will simplify
     # our already complex logic later.
     assignees.discard(issue_owner)
-    new_comment_assignees = _REVIEWABLE_ASSIGN_REGEX.findall(new_comment['body'])
+
+    new_assignees =\
+        {new_status['creator']['login']} if new_status\
+        and new_status['context'].startswith('code-review') and new_status['state'] == 'pending'\
+        else {}
 
     commentors = {comment['user']['login'] for comment in comments}
-    new_commentor = new_comment['user']['login']
+    new_commentor = new_comment['user']['login'] if new_comment else None
 
-    lgtm_givers = _get_lgtm_givers(comments)
+    is_ci_complete, lgtm_givers = _get_issue_ci_and_code_review_status(statuses)
+    new_is_ci_complete, new_lgtm_givers = _get_issue_ci_and_code_review_status(
+        [new_status] if new_status else [])
     # Make sure we don't count lgtm from user that were not assignees.
     has_assignees_without_lgtm = bool(assignees - lgtm_givers)
-    new_comment_is_lgtm = bool(_get_lgtm_givers([new_comment]))
 
-    # TODO(florian): Make this part generic as it's very specific to our repo.
-    is_demo_ready = _get_is_demo_ready(comments)
-    new_comment_is_demo_ready = _get_is_demo_ready([new_comment])
-
-    unaddressed_comment_count = _get_unaddressed_comment_count(new_comment)
+    last_comment = comments[-1] if comments else None
+    unaddressed_comment_count = _get_unaddressed_comment_count(last_comment) if last_comment else 0
     has_unaddressed_comments = bool(unaddressed_comment_count)
     can_submit = not has_assignees_without_lgtm and not has_unaddressed_comments
 
@@ -181,9 +263,6 @@ def _generate_slack_messages_for_new_comment(issue, new_comment):
 
     def add_slack_message(to_user, event, call_to_action, from_user_if_not_new_commentor=None):
         """Helper function to reduce boiler plate when calling _generate_slack_message."""
-        # In some cases, like when the commit that says the demo is ready is created by the user
-        # user that gave their personal auth token to do the integration, the from_user is not
-        # the new commentor.
         from_user = from_user_if_not_new_commentor or new_commentor
         slack_messages.update(_generate_slack_message(
             from_user=from_user,
@@ -192,28 +271,27 @@ def _generate_slack_messages_for_new_comment(issue, new_comment):
             call_to_action=call_to_action,
             issue=issue))
 
-    # TODO(florian): Replace is_demo_ready by is_ci_finished, which we would get from Github API.
     # Here is all the logic tree about what message to send to whom.
-    if not is_demo_ready:
-        # Don't ping anyone if the demo is not ready!
+    if not is_ci_complete:
+        # Don't ping anyone if ci is not done!
         return {}
 
-    if new_comment_is_demo_ready:
-        # The demo is now ready so we should ask the assignees to review it.
+    if new_is_ci_complete:
+        # The ci is now ready so we should ask the assignees to review it.
         for assignee in assignees:
             add_slack_message(assignee, ReviewableEvent.ASSIGNED, CallToAction.REVIEW, issue_owner)
         return slack_messages
 
-    if new_comment_assignees:
+    if new_assignees:
         # We have new assignees to ask to review the change.
-        for assignee in new_comment_assignees:
-            add_slack_message(assignee, ReviewableEvent.ASSIGNED, CallToAction.REVIEW)
+        for assignee in new_assignees:
+            add_slack_message(assignee, ReviewableEvent.ASSIGNED, CallToAction.REVIEW, issue_owner)
         return slack_messages
 
     # New comment is just a new comment.
     if new_commentor != issue_owner:
         # A reviewer gave some feedback to the issue owner.
-        if new_comment_is_lgtm:
+        if new_lgtm_givers:
             # The reviewer gave a lgtm.
             if can_submit:
                 add_slack_message(issue_owner, ReviewableEvent.APPROVED, CallToAction.SUBMIT)
@@ -248,9 +326,36 @@ def _generate_slack_messages_for_new_comment(issue, new_comment):
     return slack_messages
 
 
+def _get_issue_ci_and_code_review_status(all_statuses):
+    """Return the continous integration and code review status of the issue.
+
+    Return None when the statuses did not give any info about the respective status.
+    """
+    # Check the format of statuses here: https://developer.github.com/v3/repos/statuses/
+    all_statuses = sorted(all_statuses, key=lambda status: status['context'])
+    statuses_by_context = itertools.groupby(all_statuses, key=lambda status: status['context'])
+    is_ci_complete = False
+    lgtm_givers = set()
+    for context, context_statuses in statuses_by_context:
+        if context.startswith('ci/'):
+            last_status = max(context_statuses, key=lambda status: status['updated_at'])
+            # TODO(florian): improve to work with multiple ci.
+            is_ci_complete = last_status['state'] == 'success'
+        elif context.startswith('code-review/'):
+            code_review_statuses = sorted(
+                context_statuses, key=lambda status: status['creator']['login'])
+            statuses_by_user = itertools.groupby(
+                code_review_statuses, key=lambda status: status['creator']['login'])
+            for user_login, user_statuses in statuses_by_user:
+                last_status = max(user_statuses, key=lambda status: status['updated_at'])
+                if last_status['state'] == 'success':
+                    lgtm_givers.add(user_login)
+    return is_ci_complete, lgtm_givers
+
+
 def _generate_slack_message(from_user, event, to_user, call_to_action, issue):
     slack_channel = '@' + _get_slack_login(to_user)
-    # Extract 'bayesimpact/bob-emploi' from 'https://api.github.com/repos/bayesimpact/bob-emploi'
+    # Extract 'bayesimpact/bob-emploi' from 'https://api.github.com/repos/bayesimpact/bob-emploi'.
     repository_name = _GITHUB_REPO_NAME_REGEX.match(issue['repository_url']).group(1)
     reviewable_url = 'https://reviewable.io/reviews/{}/{}'.format(repository_name, issue['number'])
     event_slack_string = _generate_event_slack_string(
@@ -321,28 +426,15 @@ def _get_github_api_ressource(ressource_url):
     auth = tuple(_GITHUB_PERSONAL_ACCESS_TOKEN.split(':'))
     response = requests.get(ressource_url, auth=auth)
     if response.status_code != 200:
-        raise RequestException('Could not retrieve object from Github API:\n{}\n{}: {}'.format(
+        raise ExecutionException('Could not retrieve object from Github API:\n{}\n{}: {}'.format(
             ressource_url, response.status_code, response.text
         ))
     return response.json()
 
 
-def _get_lgtm_givers(comments):
-    """Returns Github user logins who gave a lgtm in the review comments."""
-    return {
-        comment['user']['login'] for comment in comments
-        if _REVIEWABLE_LGTM_REGEX.match(comment['body'])
-    }
-
-
-def _get_is_demo_ready(comments):
-    """Tells whether one comment said the demo is ready or not needed."""
-    return any(_REVIEWABLE_DEMO_REGEX.match(comment['body']) for comment in comments)
-
-
 def _get_unaddressed_comment_count(unused_comment):
     """Tells how many comments are still to be adressed by the review owner."""
-    # TODO(florian): Get this value from comment
+    # TODO(florian): Get this value from comment.
     return 0
 
 
