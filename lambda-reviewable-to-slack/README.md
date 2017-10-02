@@ -26,7 +26,7 @@ If you want to modify this code:
 * To test the Flask endpoint of the AWS Lambda function locally:
 ```
 docker-compose run lambda-reviewable-to-slack-test bash
-FLASK_APP=reviewable_to_slack.py
+export FLASK_APP=reviewable_to_slack.py
 flask run &
 curl -H "Content-Type: application/json" -X POST --data @github_notification_payload_example.json http://127.0.0.1:5000/handle_github_notification
 ```

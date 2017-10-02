@@ -14,6 +14,7 @@ _GITHUB_TO_SLACK_LOGIN = {
     'florian_jourda_circle_ci': 'florian',
 }
 
+
 @mock.patch('reviewable_to_slack._GITHUB_TO_SLACK_LOGIN', _GITHUB_TO_SLACK_LOGIN)
 @mock.patch('reviewable_to_slack._ERROR_SLACK_CHANNEL', _ERROR_SLACK_CHANNEL)
 class ReviewableToSlackTestCase(unittest.TestCase):
