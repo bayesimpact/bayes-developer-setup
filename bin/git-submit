@@ -29,6 +29,9 @@ if [ -z "${BRANCH}" ]; then
 	fi
 fi
 
+# Enable specific option if user has the experimental GIT_SUBMIT_EXPERIMENTAL env var set.
+readonly SQUASH_ON_GITHUB="${GIT_SUBMIT_EXPERIMENTAL}"
+
 # Ensures that current dir is clean.
 if [ -n "$(git diff HEAD --shortstat 2> /dev/null | tail -n1)" ]; then
 	echo "Current git status is dirty. Commit, stash or revert your changes before submitting." 1>&2
@@ -92,13 +95,17 @@ while [ "${BASE_MASTER}" != "$(git rev-parse "${BRANCH}^")" ]; do
 		exit 3
 	fi
 	if ( git merge-base --is-ancestor "$(git rev-parse "${BRANCH}^")" "${BASE_MASTER}" ); then
-		if ! (git rebase "${BASE_BRANCH}" "${BRANCH}"); then
-			git rebase --abort
-			exit 10
-		fi
+    # There is only one new commit, but it's based on an old version of master.
+    if [[ -z "${SQUASH_ON_GITHUB}" ]] && ! (git rebase "${BASE_BRANCH}" "${BRANCH}"); then
+      git rebase --abort
+      exit 10
+    fi
 	else
 		echo "You should first group all your changes in one commit:" 1>&2
 		echo "  git rebase -i ${BASE_BRANCH} ${BRANCH}" 1>&2
+    if [[ -n "${SQUASH_ON_GITHUB}" ]]; then
+      exit 12
+    fi
 		read -p "Rebase now? [y/N]" answer
 		if [ "${answer}" == "y" ] || [ "${answer}" == "Y" ]; then
 			if ! (git rebase -i "${BASE_BRANCH}" "${BRANCH}"); then
@@ -122,23 +129,58 @@ if [ -z "${BRANCH_REMOTE}" ]; then
 	exit 5
 fi
 
-# Check that the remote branch is synced with the local one.
-if [ "$(git rev-parse "${BRANCH_REMOTE}/${BRANCH_MERGE}")" != "$(git rev-parse "${BRANCH}")" ]; then
-	echo "Push your branch on ${BRANCH_REMOTE}, or you'll have a hard time removing the pull request:" 1>&2
-	echo "  git push -f ${BRANCH_REMOTE} ${BRANCH}:${BRANCH_MERGE}"
-	git push -f "${BRANCH_REMOTE}" "${BRANCH}:${BRANCH_MERGE}" || abort
-fi
+if [ -n "${SQUASH_ON_GITHUB}" ]; then
+  # Get OAuth Token.
+  readonly GITHUB_OAUTH_TOKEN="$(sed -n '/^github.com/,$p' ~/.config/hub | grep oauth_token | head -1 | cut -d: -f2 | sed -e "s/ //")"
+  if [ -z "${GITHUB_OAUTH_TOKEN}" ]; then
+    echo "Could not find OAuth Token to connect to GitHub API." 1>&2
+    abort
+  fi
 
-# Update master locally.
-git checkout master
-if ! (git rebase "${BRANCH}"); then
-	git rebase --abort
-	abort
-fi
+  # Get GitHub repo name.
+  if ! [[ "$(git remote get-url "${BRANCH_REMOTE}")" =~ ^git@github.com:(.*)/(.*).git$ ]]; then
+    echo "Could not find the GitHub repository's name." 1>&2
+    abort
+  fi
+  readonly GITHUB_REPO_USER="${BASH_REMATCH[1]}"
+  readonly GITHUB_REPO_NAME="${BASH_REMATCH[2]}"
 
-# Push updated master to remote.
-git push "${BASE_REMOTE}" master || abort
+  # Find pull-request ID.
+  readonly PULL_REQUEST_NUMBER="$(curl -s \
+    -H "Authorization: token ${GITHUB_OAUTH_TOKEN}" \
+    "https://api.github.com/repos/${GITHUB_REPO_USER}/${GITHUB_REPO_NAME}/pulls?base=master&head=${GITHUB_REPO_USER}:${BRANCH_MERGE}" | \
+    grep '"number"' | sed -e "s/^.*: //;s/,//")"
+  if [[ -z "${PULL_REQUEST_NUMBER}" ]]; then
+    echo "Could not find the Pull Request number." 1>&2
+    abort
+  fi
+
+  # Ask GitHub to do the squash and merge!
+  curl -X PUT -H "Authorization: token ${GITHUB_OAUTH_TOKEN}" \
+    "https://api.github.com/repos/${GITHUB_REPO_USER}/${GITHUB_REPO_NAME}/pulls/${PULL_REQUEST_NUMBER}/merge" \
+    --data "{\"merge_method\": \"squash\", \"sha\": \"${BRANCH_INITIAL}\"}" || abort
+else
+  # Check that the remote branch is synced with the local one.
+  if [ "$(git rev-parse "${BRANCH_REMOTE}/${BRANCH_MERGE}")" != "$(git rev-parse "${BRANCH}")" ]; then
+    echo "Push your branch on ${BRANCH_REMOTE}, or you'll have a hard time removing the pull request:" 1>&2
+    echo "  git push -f ${BRANCH_REMOTE} ${BRANCH}:${BRANCH_MERGE}"
+    git push -f "${BRANCH_REMOTE}" "${BRANCH}:${BRANCH_MERGE}" || abort
+  fi
+
+  # Update master locally.
+  git checkout master
+  if ! (git rebase "${BRANCH}"); then
+    git rebase --abort
+    abort
+  fi
+
+  # Push updated master to remote.
+  git push "${BASE_REMOTE}" master || abort
+fi
 
 # Remove branch locally and remotely.
-git branch -d "${BRANCH}"
+if [[ "${BRANCH}" == "$(git rev-parse --abbrev-ref HEAD)" ]]; then
+  git checkout master
+fi
+git branch -D "${BRANCH}"
 git push ${BRANCH_REMOTE} ":${BRANCH_MERGE}"
