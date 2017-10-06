@@ -182,17 +182,6 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         slack_messages = self._handle_github_notification('status', github_notification)
         return slack_messages
 
-    def _generate_slack_messages_for_new_assignee(self, new_assignee):
-        """Get the Slack messages that would be generate when a new reviewer is assigned."""
-        self._add_assignees({new_assignee})
-        github_notification = self._simulate_notification_for_new_status(
-            context='code-review/reviewable',
-            state='pending',
-            creator=new_assignee,
-            target_url='https://reviewable.io/reviews/bayesimpact/bob-emploi/5670')
-        slack_messages = self._handle_github_notification('status', github_notification)
-        return slack_messages
-
     def _generate_slack_messages_for_new_lgtm(self, lgtm_giver):
         """Get the Slack messages that would be generate when a new CI statis is created."""
         github_notification = self._simulate_notification_for_new_status(
@@ -223,8 +212,24 @@ class ReviewableToSlackTestCase(unittest.TestCase):
 
     # As the name of the tests are self-explanatory, we don't need docstrings for them.
     # pylint: disable=missing-docstring
+    def test_reviewee_is_warned_when_ci_fails(self):
+        slack_messages = self._generate_slack_messages_for_new_ci_status('failure')
+        self.assertEqual([{
+            'slack_channel': '@guillaume',
+            'slack_message':
+                '_❗️Continuous integration tests failed for your change ' +
+                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                "Let's <https://circleci.com/gh/bayesimpact/bob-emploi/13420|check what the problem is>"
+        }], slack_messages)
+
     def test_review_workflow_when_adding_assignee_before_demo_is_ready(self):
-        slack_messages = self._generate_slack_messages_for_new_assignee('pascal_corpet_reviewer_1')
+        slack_messages = self._generate_slack_messages_for_new_ci_status('pending')
+        self.assertEqual([], slack_messages, 'No message expected before CI is done')
+        slack_messages = self._generate_slack_messages_for_new_comment(
+            'guillaume_chaslot_reviewee',
+            '+@pascal_corpet_reviewer_1 \n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5670#-:-KusZEAfCXr76VdJBPDn:bv2wshd)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
+            ['pascal_corpet_reviewer_1']
+        )
         self.assertEqual([], slack_messages, 'No message expected before CI is done')
         slack_messages = self._generate_slack_messages_for_new_ci_status('success')
         self.assertEqual([{
@@ -238,7 +243,11 @@ class ReviewableToSlackTestCase(unittest.TestCase):
     def test_review_workflow_when_adding_assignee_after_demo_is_ready(self):
         slack_messages = self._generate_slack_messages_for_new_ci_status('success')
         self.assertEqual([], slack_messages, 'No message should be sent because no assignees yet')
-        slack_messages = self._generate_slack_messages_for_new_assignee('pascal_corpet_reviewer_1')
+        slack_messages = self._generate_slack_messages_for_new_comment(
+            'guillaume_chaslot_reviewee',
+            '+@pascal_corpet_reviewer_1 \n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5670#-:-KusZEAfCXr76VdJBPDn:bv2wshd)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
+            ['pascal_corpet_reviewer_1']
+        )
         self.assertEqual([{
             'slack_channel': '@pascal',
             'slack_message':
