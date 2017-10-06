@@ -56,8 +56,11 @@ def handle_github_notification():
         status_code = 500
     # TODO(florian): Call Slack directly.
     zapier_to_slack_endpoint = 'https://hooks.zapier.com/hooks/catch/1946029/iy46wx/'
-    zapier_slack_payloads = []
-    if _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL:
+    if not slack_messages:
+        # Don't ping anybody about no-op, even if _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL is set
+        # because this creates way too many notifications.
+        zapier_slack_payloads = []
+    elif _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL:
         # To debug the integration, send only one message with all the info to the channel used
         # to test.
         all_messages_in_one = 'Messages from Reviewable:\n' + ('\n\n'.join([
@@ -92,6 +95,7 @@ class ReviewableEvent(enum.Enum):
     COMMENTED = 'COMMENTED'
     RESPONDED = 'RESPONDED'
     APPROVED = 'APPROVED'
+    CI_FAILED = 'CI_FAILED'
 
 
 class CallToAction(enum.Enum):
@@ -100,6 +104,7 @@ class CallToAction(enum.Enum):
     SUBMIT = 'SUBMIT'
     CHECK_FEEDBACK = 'CHECK_FEEDBACK'
     CHECK_CHANGE = 'CHECK_CHANGE'
+    CHECK_CI = 'CHECK_CI'
     ADDRESS_COMMENTS = 'ADDRESS_COMMENTS'
     WAIT_FOR_OTHER_REVIEWERS = 'WAIT_FOR_OTHER_REVIEWERS'
 
@@ -141,14 +146,16 @@ _EVENT_SLACK_TEMPLATES = {
     ReviewableEvent.COMMENTED: '{who} has commented on {whose_change}',
     ReviewableEvent.RESPONDED: '{who} has responsed to comments on {whose_change}',
     ReviewableEvent.APPROVED: '{who} has approved {whose_change}',
+    ReviewableEvent.CI_FAILED: '❗️ Continuous integration tests failed for {whose_change}'
 }
 
 _CALL_TO_ACTION_TEMPLATES = {
-    CallToAction.REVIEW: "Let's <{url}|check this code>!",
+    CallToAction.REVIEW: "Let's <{code_review_url}|check this code>!",
     CallToAction.SUBMIT: "Let's `git submit`!",
-    CallToAction.CHECK_FEEDBACK: "Let's <{url}|check their feedback>!",
-    CallToAction.CHECK_CHANGE: "Let's <{url}|check what they have changed>!",
-    CallToAction.ADDRESS_COMMENTS: "Let's <{url}|address the remaining comments>",
+    CallToAction.CHECK_FEEDBACK: "Let's <{code_review_url}|check their feedback>!",
+    CallToAction.CHECK_CHANGE: "Let's <{code_review_url}|check what they have changed>!",
+    CallToAction.CHECK_CI: "Let's <{ci_url}|check what the problem is>.",
+    CallToAction.ADDRESS_COMMENTS: "Let's <{code_review_url}|address the remaining comments>.",
     CallToAction.WAIT_FOR_OTHER_REVIEWERS: 'You now need to wait for the other reviewers.',
 }
 
@@ -225,16 +232,13 @@ def _generate_slack_messages_for_new_status_or_comment(
     # our already complex logic later.
     assignees.discard(reviewee)
 
-    new_assignees =\
-        {new_status['creator']['login']} if new_status\
-        and new_status['context'].startswith('code-review') and new_status['state'] == 'pending'\
-        else {}
+    new_assignees = _REVIEWABLE_ASSIGN_REGEX.findall(new_comment['body']) if new_comment else {}
 
     commentors = {comment['user']['login'] for comment in comments}
     new_commentor = new_comment['user']['login'] if new_comment else None
 
-    is_ci_complete, lgtm_givers = _get_ci_and_code_review_status(statuses)
-    new_is_ci_complete, new_lgtm_givers = _get_ci_and_code_review_status(
+    ci_status, ci_url, lgtm_givers = _get_ci_and_code_review_status(statuses)
+    new_ci_status, unused_new_ci_url, new_lgtm_givers = _get_ci_and_code_review_status(
         [new_status] if new_status else [])
     # Make sure we don't count lgtm from user that were not assignees.
     has_assignees_without_lgtm = bool(assignees - lgtm_givers)
@@ -244,33 +248,38 @@ def _generate_slack_messages_for_new_status_or_comment(
     has_unaddressed_comments = bool(unaddressed_comment_count)
     can_submit = not has_assignees_without_lgtm and not has_unaddressed_comments
 
+    from_user = reviewee if new_ci_status else new_commentor
     slack_messages = {}
-
-    def add_slack_message(to_user, event, call_to_action, from_user_if_not_new_commentor=None):
+    def add_slack_message(to_user, event, call_to_action):
         """Helper function to reduce boiler plate when calling _generate_slack_message."""
-        from_user = from_user_if_not_new_commentor or new_commentor
         slack_messages.update(_generate_slack_message(
             from_user=from_user,
             event=event,
             to_user=to_user,
             call_to_action=call_to_action,
-            pull_request=pull_request))
+            pull_request=pull_request,
+            ci_url=ci_url))
 
     # Here is all the logic tree about what message to send to whom.
-    if not is_ci_complete:
+    if not ci_status or ci_status == 'pending':
         # Don't ping anyone if CI is not done!
         return {}
 
-    if new_is_ci_complete:
+    if new_ci_status == 'failure':
+        # CI tests just failed, warn the reviewee.
+        add_slack_message(reviewee, ReviewableEvent.CI_FAILED, CallToAction.CHECK_CI)
+        return slack_messages
+
+    if new_ci_status == 'success':
         # The CI is now ready so we should ask the assignees to review it.
         for assignee in assignees:
-            add_slack_message(assignee, ReviewableEvent.ASSIGNED, CallToAction.REVIEW, reviewee)
+            add_slack_message(assignee, ReviewableEvent.ASSIGNED, CallToAction.REVIEW)
         return slack_messages
 
     if new_assignees:
         # We have new assignees to ask to review the change.
         for assignee in new_assignees:
-            add_slack_message(assignee, ReviewableEvent.ASSIGNED, CallToAction.REVIEW, reviewee)
+            add_slack_message(assignee, ReviewableEvent.ASSIGNED, CallToAction.REVIEW)
         return slack_messages
 
     # New comment is just a new comment.
@@ -320,36 +329,41 @@ def _get_ci_and_code_review_status(all_statuses):
     # TODO(add more doc abou the different event formats)
     all_statuses = sorted(all_statuses, key=lambda status: status['context'])
     statuses_by_context = itertools.groupby(all_statuses, key=lambda status: status['context'])
-    is_ci_complete = False
+    ci_status = None
+    ci_url = None
     lgtm_givers = set()
     for context, context_statuses in statuses_by_context:
         if context.startswith('ci/'):
             last_status = max(context_statuses, key=lambda status: status['updated_at'])
             # TODO(florian): improve to work with multiple CI.
-            is_ci_complete = last_status['state'] == 'success'
+            ci_status = last_status['state']
+            ci_url = last_status['target_url']
             continue
 
         if context.startswith('code-review/'):
+            def get_reviewer_login(status):
+                reviewer = status['creator'] if 'creator' in status else status['sender']
+                return reviewer['login']
             code_review_statuses = sorted(
-                context_statuses, key=lambda status: status['creator']['login'])
+                context_statuses, key=get_reviewer_login)
             statuses_by_user = itertools.groupby(
-                code_review_statuses, key=lambda status: status['creator']['login'])
+                code_review_statuses, key=get_reviewer_login)
             for user_login, user_statuses in statuses_by_user:
                 last_status = max(user_statuses, key=lambda status: status['updated_at'])
                 if last_status['state'] == 'success':
                     lgtm_givers.add(user_login)
-    return is_ci_complete, lgtm_givers
+    return ci_status, ci_url, lgtm_givers
 
 
-def _generate_slack_message(from_user, event, to_user, call_to_action, pull_request):
+def _generate_slack_message(from_user, event, to_user, call_to_action, pull_request, ci_url):
     slack_channel = '@' + _get_slack_login(to_user)
-    # Extract 'bayesimpact/bob-emploi' from 'https://api.github.com/repos/bayesimpact/bob-emploi'.
     repository_name = pull_request['repository']['full_name']
-    reviewable_url = 'https://reviewable.io/reviews/{}/{}'.format(
+    code_review_url = 'https://reviewable.io/reviews/{}/{}'.format(
         repository_name, pull_request['number'])
     event_slack_string = _generate_event_slack_string(
-        from_user, event, to_user, pull_request, reviewable_url)
-    call_to_action_string = _generate_call_to_action_slack_string(call_to_action, reviewable_url)
+        from_user, event, to_user, pull_request, code_review_url)
+    call_to_action_string = _generate_call_to_action_slack_string(
+        call_to_action, code_review_url, ci_url)
     slack_message = '_{}:_\n{}'.format(event_slack_string, call_to_action_string)
     return {slack_channel: slack_message}
 
@@ -363,7 +377,7 @@ def _get_slack_login(github_login):
     return slack_login
 
 
-def _generate_event_slack_string(from_user, event, to_user, pull_request, reviewable_url):
+def _generate_event_slack_string(from_user, event, to_user, pull_request, code_review_url):
     if from_user == to_user:
         who = 'You'
     else:
@@ -376,15 +390,15 @@ def _generate_event_slack_string(from_user, event, to_user, pull_request, review
         whose = 'their'
     else:
         whose = '@' + _get_slack_login(reviewee) + "'s"
-    whose_change = '{} change <{}|{}>'.format(whose, reviewable_url, pull_request['title'])
+    whose_change = '{} change <{}|{}>'.format(whose, code_review_url, pull_request['title'])
 
     event_slack_string = _EVENT_SLACK_TEMPLATES[event].format(who=who, whose_change=whose_change)
     return event_slack_string
 
 
-def _generate_call_to_action_slack_string(call_to_action, first_comment_url):
+def _generate_call_to_action_slack_string(call_to_action, code_review_url, ci_url):
     call_to_action_slack_string = _CALL_TO_ACTION_TEMPLATES[call_to_action].format(
-        url=first_comment_url)
+        code_review_url=code_review_url, ci_url=ci_url)
     return call_to_action_slack_string
 
 
