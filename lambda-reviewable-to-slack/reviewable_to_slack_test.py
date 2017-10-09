@@ -219,7 +219,8 @@ class ReviewableToSlackTestCase(unittest.TestCase):
             'slack_message':
                 '_❗️ Continuous integration tests failed for your change ' +
                 '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
-                "Let's <https://circleci.com/gh/bayesimpact/bob-emploi/13420|check what the problem is>"
+                "Let's <https://circleci.com/gh/bayesimpact/bob-emploi/13420|check what the " +
+                'problem is>.'
         }], slack_messages)
 
     def test_review_workflow_when_adding_assignee_before_demo_is_ready(self):
