@@ -10,18 +10,8 @@ import traceback
 import flask
 import requests
 
-# TODO(florian): Put GITHUB_TO_SLACK_LOGIN and error_slack_channel into an env variable.
-_GITHUB_TO_SLACK_LOGIN = {
-    'bmat06': 'benoit',
-    'florianjourda': 'florian',
-    'margaux2': 'margaux',
-    'mlendale': 'marielaure',
-    'john-mts': 'john',
-    'pcorpet': 'pascal',
-    'pnbt': 'guillaume',
-    'pyduan': 'paul',
-}
-_ERROR_SLACK_CHANNEL = '@florian'
+_GITHUB_TO_SLACK_LOGIN = json.loads(os.getenv('GITHUB_TO_SLACK_LOGIN', '{}'))
+_ERROR_SLACK_CHANNEL = os.getenv('ERROR_SLACK_CHANNEL')
 # The following variable is used for development, to check what messages are sent to all users.
 _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL = os.getenv('REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL')
 
@@ -31,6 +21,10 @@ app = flask.Flask(__name__)  # pylint: disable=invalid-name
 @app.route('/', methods=['GET', 'POST'])
 def index():
     """Health check endpoint."""
+    error_message = _get_missing_env_vars_error_message()
+    if error_message:
+        return error_message, 500
+
     return '''Integration to send Reviewable updates to Slack.
         Status: ✅
         Link Github webhook to post json to /handle_github_notification'''
@@ -39,6 +33,10 @@ def index():
 @app.route('/handle_github_notification', methods=['POST'])
 def handle_github_notification():
     """Receives a Github webhook notification and handles it to potentially ping devs on Slack."""
+    error_message = _get_missing_env_vars_error_message()
+    if error_message:
+        return error_message, 500
+
     github_event_type = flask.request.headers.get('X-GitHub-Event')
     github_notification = json.loads(flask.request.data)
     try:
@@ -80,9 +78,18 @@ def handle_github_notification():
     for zapier_slack_payload in zapier_slack_payloads:
         response = requests.post(zapier_to_slack_endpoint, json=zapier_slack_payload)
         if response.status_code != 200:
-            flask.abort(500, message='Error with Slack:\n{} {}'.format(
-                response.status_code, response.text))
+            return 'Error with Slack:\n{} {}'.format(response.status_code, response.text), 500
     return json.dumps(zapier_slack_payloads), status_code
+
+
+def _get_missing_env_vars_error_message():
+    error_message = ''
+    if not _GITHUB_TO_SLACK_LOGIN:
+        error_message += 'Need to set up GITHUB_TO_SLACK_LOGIN as env var in the format:' +\
+            '{"florianjourda": "florian"}\n'
+    if not _ERROR_SLACK_CHANNEL:
+        error_message += 'Need to set up ERROR_SLACK_CHANNEL as env var in the format: #general'
+    return error_message
 
 
 GithubEventParams = collections.namedtuple('GithubEventParams', [

@@ -23,7 +23,9 @@ services:
       - ./.pylintrc:/test/.pylintrc:ro
       - ./.pep8:/test/.pep8:ro
     environment:
+      ERROR_SLACK_CHANNEL:
       GITHUB_PERSONAL_ACCESS_TOKEN:
+      GITHUB_TO_SLACK_LOGIN:
       REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL:
     tty: true
   lambda-reviewable-to-slack-deploy:
