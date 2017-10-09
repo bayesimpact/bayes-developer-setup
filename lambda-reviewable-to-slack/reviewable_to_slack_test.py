@@ -51,12 +51,20 @@ class ReviewableToSlackTestCase(unittest.TestCase):
                 'https://api.github.com/repos/bayesimpact/bob-emploi/issues/5670/comments',
             'statuses_url': 'https://api.github.com/repos/bayesimpact/bob-emploi/statuses/353ff7e711d0dab6cff5e7e90026c7f8eff05016',  # nopep8 # pylint: disable=line-too-long
             'repository_url': 'https://api.github.com/repos/bayesimpact/bob-emploi',
-            'repository': {
-                'full_name': 'bayesimpact/bob-emploi',
-                'owner': {'login': 'bayesimpact'}
+            'head': {
+                'repo': {
+                    'full_name': 'bayesimpact/bob-emploi',
+                    'owner': {'login': 'bayesimpact'}
+                },
             },
         }
         self._github_statuses = []
+
+        # Fake ID to increment to give to statuses.
+        self._comment_id = 1000
+
+        # Fake ID to increment to give to statuses.
+        self._status_id = 2000
 
         # Fake time to create fake timestamps.
         self._fake_time_seconds = 0
@@ -89,7 +97,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
                 'https://api.github.com/repos/bayesimpact/bob-emploi/pulls/5670':
                     self._github_pull_request,
                 'https://api.github.com/repos/bayesimpact/bob-emploi/pulls?base=master&head=bayesimpact:guillaume-fixed-some-bug':  # nopep8 # pylint: disable=line-too-long
-                    self._github_pull_request,
+                    [self._github_pull_request],
                 'https://api.github.com/repos/bayesimpact/bob-emploi/statuses/353ff7e711d0dab6cff5e7e90026c7f8eff05016':  # nopep8 # pylint: disable=line-too-long
                     self._github_statuses,
             }
@@ -119,19 +127,21 @@ class ReviewableToSlackTestCase(unittest.TestCase):
             sha=None):
         """Return a new status in Github and create Github notification."""
         status = {
+            'id': self._status_id,
             'context': context,
             'creator': {'login': creator},
             'state': state,
             'target_url': target_url,
             'updated_at': self._get_fake_time(),
-            'branches': {
+            'branches': [{
                 'name': 'guillaume-fixed-some-bug',
-            },
+            }],
             'repository': {
                 'owner': {'login': 'bayesimpact'},
                 'pulls_url': 'https://api.github.com/repos/bayesimpact/bob-emploi/pulls{/number}',
             },
         }
+        self._status_id = self._status_id + 1
         if sha:
             status['sha'] = sha
         # Github orders statuses in reverse chronological order.
@@ -150,9 +160,11 @@ class ReviewableToSlackTestCase(unittest.TestCase):
             new_assignees=None):
         """Return a new comment in the Github issue and create Github notification."""
         comment = {
+            'id': self._comment_id,
             'user': {'login': commentor},
             'body': comment_body,
         }
+        self._comment_id = self._comment_id + 1
         self._add_assignees(new_assignees)
         # The value of _github_issue_comments will be given back by the mocked API call
         # that gets Github comments.
@@ -219,7 +231,8 @@ class ReviewableToSlackTestCase(unittest.TestCase):
             'slack_message':
                 '_❗️ Continuous integration tests failed for your change ' +
                 '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
-                "Let's <https://circleci.com/gh/bayesimpact/bob-emploi/13420|check what the problem is>"
+                "Let's <https://circleci.com/gh/bayesimpact/bob-emploi/13420|check what the " +
+                'problem is>.'
         }], slack_messages)
 
     def test_review_workflow_when_adding_assignee_before_demo_is_ready(self):
