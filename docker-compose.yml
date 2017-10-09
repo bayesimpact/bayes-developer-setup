@@ -18,8 +18,8 @@ services:
       - ./lambda-reviewable-to-slack/lint_and_test.sh:/test/lint_and_test.sh:ro
       - ./lambda-reviewable-to-slack/reviewable_to_slack.py:/test/reviewable_to_slack.py:ro
       - ./lambda-reviewable-to-slack/reviewable_to_slack_test.py:/test/reviewable_to_slack_test.py:ro
-      - ./lambda-reviewable-to-slack/github_notification_status_event_example.json:/test/github_notification_status_event_example.json:ro
-      - ./lambda-reviewable-to-slack/github_notification_issue_comment_event_example.json:/test/github_notification_issue_comment_event_example.json:ro
+      - ./lambda-reviewable-to-slack/notification_examples/github_notification_status_event_example.json:/test/github_notification_status_event_example.json:ro
+      - ./lambda-reviewable-to-slack/notification_examples/github_notification_issue_comment_event_example.json:/test/github_notification_issue_comment_event_example.json:ro
       - ./.pylintrc:/test/.pylintrc:ro
       - ./.pep8:/test/.pep8:ro
     environment:

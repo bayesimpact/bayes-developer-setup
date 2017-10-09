@@ -180,9 +180,11 @@ def _get_all_resources_for_issue_comment_event(github_notification):
     pull_request_url = issue['pull_request']['url']
     pull_request = _get_github_api_ressource(pull_request_url)
     statuses = _get_github_api_ressource(pull_request['statuses_url'])
-    comments = _get_github_api_ressource(pull_request['comments_url'])
     new_status = None
-    new_comment = github_notification['comment']
+    comments = _get_github_api_ressource(pull_request['comments_url'])
+    # Get the version of new_comment from the API instead of from the github notification.
+    new_comment = next((comment for comment in comments
+                        if comment['id'] == github_notification['comment']['id']))
     return GithubEventParams(
         pull_request=pull_request,
         statuses=statuses,
@@ -200,17 +202,23 @@ def _get_all_resources_for_status_event(github_notification):
             _REVIEWABLE_URL_REGEX.match(github_notification['target_url']).groupdict()
         pull_request_url = 'https://api.github.com/repos/{repo}/pulls/{number}'.format(
             **repo_and_number)
+        pull_request = _get_github_api_ressource(pull_request_url)
     elif new_status['context'].startswith('ci/circleci'):
         filter_for_branch = '?base=master&head={}:{}'.format(
-            new_status['repository']['owner']['login'], new_status['branches']['name'])
+            new_status['repository']['owner']['login'], new_status['branches'][0]['name'])
         pull_request_url = new_status['repository']['pulls_url'].replace(
             '{/number}', filter_for_branch)
+        pull_requests = _get_github_api_ressource(pull_request_url)
+        if len(pull_requests) != 1:
+            raise ExecutionException('Did not find one pull_request: {}'.format(pull_requests))
+        pull_request = pull_requests[0]
     else:
         raise ExecutionException(
             "Does not support '{}' status context".format(new_status['context']))
 
-    pull_request = _get_github_api_ressource(pull_request_url)
     statuses = _get_github_api_ressource(pull_request['statuses_url'])
+    # Get the version of new_status from the API instead of from the github notification.
+    new_status = next((status for status in statuses if status['id'] == new_status['id']))
     comments = _get_github_api_ressource(pull_request['comments_url'])
     new_comment = None
     return GithubEventParams(
@@ -248,8 +256,14 @@ def _generate_slack_messages_for_new_status_or_comment(
     has_unaddressed_comments = bool(unaddressed_comment_count)
     can_submit = not has_assignees_without_lgtm and not has_unaddressed_comments
 
-    from_user = reviewee if new_ci_status else new_commentor
+    if new_commentor:
+        from_user = new_commentor
+    elif new_ci_status:
+        from_user = reviewee
+    else:
+        from_user = new_status['creator']['login']
     slack_messages = {}
+
     def add_slack_message(to_user, event, call_to_action):
         """Helper function to reduce boiler plate when calling _generate_slack_message."""
         slack_messages.update(_generate_slack_message(
@@ -297,7 +311,7 @@ def _generate_slack_messages_for_new_status_or_comment(
                 # But there are still other reviewers to wait for.
                 add_slack_message(reviewee, ReviewableEvent.APPROVED,
                                   CallToAction.WAIT_FOR_OTHER_REVIEWERS)
-        else:
+        elif new_comment:
             # The reviewer gave some comments.
             add_slack_message(reviewee, ReviewableEvent.COMMENTED, CallToAction.CHECK_FEEDBACK)
         return slack_messages
@@ -341,13 +355,12 @@ def _get_ci_and_code_review_status(all_statuses):
             continue
 
         if context.startswith('code-review/'):
-            def get_reviewer_login(status):
-                reviewer = status['creator'] if 'creator' in status else status['sender']
-                return reviewer['login']
+            def _get_reviewer_login(status):
+                return status['creator']['login']
             code_review_statuses = sorted(
-                context_statuses, key=get_reviewer_login)
+                context_statuses, key=_get_reviewer_login)
             statuses_by_user = itertools.groupby(
-                code_review_statuses, key=get_reviewer_login)
+                code_review_statuses, key=_get_reviewer_login)
             for user_login, user_statuses in statuses_by_user:
                 last_status = max(user_statuses, key=lambda status: status['updated_at'])
                 if last_status['state'] == 'success':
@@ -357,7 +370,7 @@ def _get_ci_and_code_review_status(all_statuses):
 
 def _generate_slack_message(from_user, event, to_user, call_to_action, pull_request, ci_url):
     slack_channel = '@' + _get_slack_login(to_user)
-    repository_name = pull_request['repository']['full_name']
+    repository_name = pull_request['head']['repo']['full_name']
     code_review_url = 'https://reviewable.io/reviews/{}/{}'.format(
         repository_name, pull_request['number'])
     event_slack_string = _generate_event_slack_string(
