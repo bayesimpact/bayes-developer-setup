@@ -10,8 +10,12 @@ import traceback
 import flask
 import requests
 
+# Map from Github users to Slack users.
 _GITHUB_TO_SLACK_LOGIN = json.loads(os.getenv('GITHUB_TO_SLACK_LOGIN', '{}'))
+# Channel to send unexpected error messages to (typically channel of the admin like '@florian').
 _ERROR_SLACK_CHANNEL = os.getenv('ERROR_SLACK_CHANNEL')
+# Set of Slack users like ['florian'] who do not want to be notified on Slack.
+_DISABLED_SLACK_LOGINS = set(json.loads(os.getenv('DISABLED_SLACK_LOGINS', '[]')))
 # The following variable is used for development, to check what messages are sent to all users.
 _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL = os.getenv('REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL')
 
@@ -377,7 +381,10 @@ def _get_ci_and_code_review_status(all_statuses):
 
 
 def _generate_slack_message(from_user, event, to_user, call_to_action, pull_request, ci_url):
-    slack_channel = '@' + _get_slack_login(to_user)
+    slack_login = _get_slack_login(to_user)
+    if slack_login in _DISABLED_SLACK_LOGINS:
+        return {}
+    slack_channel = '@' + slack_login
     repository_name = pull_request['head']['repo']['full_name']
     code_review_url = 'https://reviewable.io/reviews/{}/{}'.format(
         repository_name, pull_request['number'])

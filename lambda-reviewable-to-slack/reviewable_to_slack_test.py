@@ -235,6 +235,11 @@ class ReviewableToSlackTestCase(unittest.TestCase):
                 'problem is>.'
         }], slack_messages)
 
+    @mock.patch('reviewable_to_slack._DISABLED_SLACK_LOGINS', {'guillaume'})
+    def test_disable_slack_login_does_not_get_message(self):
+        slack_messages = self._generate_slack_messages_for_new_ci_status('failure')
+        self.assertEqual([], slack_messages)
+
     def test_review_workflow_when_adding_assignee_before_demo_is_ready(self):
         slack_messages = self._generate_slack_messages_for_new_ci_status('pending')
         self.assertEqual([], slack_messages, 'No message expected before CI is done')
