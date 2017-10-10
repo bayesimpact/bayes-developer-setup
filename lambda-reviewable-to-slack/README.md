@@ -23,12 +23,10 @@ This setup needs to be done once per repo on Github and per organization on Slac
 # Lint and Test
 If you want to modify this code:
 
-* To test the Flask endpoint of the AWS Lambda function locally:
+* To manually test the Flask endpoint of the AWS Lambda function locally:
 ```
 docker-compose run lambda-reviewable-to-slack-test bash
-export FLASK_APP=reviewable_to_slack.py
-flask run &
-curl -H "Content-Type: application/json" -X POST --data @github_notification_payload_example.json http://127.0.0.1:5000/handle_github_notification
+./manual_flask_test/test-flask-endpoint.sh issue_comment manual_flask_test/test_payloads/github_notification_issue_comment.json
 ```
 * To run the linting and testing:
 ```
