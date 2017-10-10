@@ -90,15 +90,15 @@ class ReviewableToSlackTestCase(unittest.TestCase):
             """Return the current state of the Github issue."""
             response = mock.MagicMock()
             url_to_response = {
-                'https://api.github.com/repos/bayesimpact/bob-emploi/issues/5670':
+                'https://api.github.com/repos/bayesimpact/bob-emploi/issues/5670?per_page=100':
                     self._github_issue,
-                'https://api.github.com/repos/bayesimpact/bob-emploi/issues/5670/comments':
+                'https://api.github.com/repos/bayesimpact/bob-emploi/issues/5670/comments?per_page=100':  # nopep8 # pylint: disable=line-too-long
                     self._github_issue_comments,
-                'https://api.github.com/repos/bayesimpact/bob-emploi/pulls/5670':
+                'https://api.github.com/repos/bayesimpact/bob-emploi/pulls/5670?per_page=100':
                     self._github_pull_request,
-                'https://api.github.com/repos/bayesimpact/bob-emploi/pulls?base=master&head=bayesimpact:guillaume-fixed-some-bug':  # nopep8 # pylint: disable=line-too-long
+                'https://api.github.com/repos/bayesimpact/bob-emploi/pulls?base=master&head=bayesimpact:guillaume-fixed-some-bug&per_page=100':  # nopep8 # pylint: disable=line-too-long
                     [self._github_pull_request],
-                'https://api.github.com/repos/bayesimpact/bob-emploi/statuses/353ff7e711d0dab6cff5e7e90026c7f8eff05016':  # nopep8 # pylint: disable=line-too-long
+                'https://api.github.com/repos/bayesimpact/bob-emploi/statuses/353ff7e711d0dab6cff5e7e90026c7f8eff05016?per_page=100':  # nopep8 # pylint: disable=line-too-long
                     self._github_statuses,
             }
             # Will fail if url is not defined in mocked_calls.
@@ -269,6 +269,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
             'slack_message':
                 '_@pascal has approved your change ' +
                 '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                ':lgtm:\n' +
                 "Let's `git submit`!"
         }], slack_messages)
 
@@ -314,6 +315,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
             'slack_message':
                 '_@pascal has approved your change ' +
                 '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                ':lgtm:\n' +
                 'You now need to wait for the other reviewers.'
         }], slack_messages)
 
@@ -326,6 +328,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
             'slack_message':
                 '_@john has approved your change ' +
                 '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                ':lgtm_strong:\n' +
                 "Let's `git submit`!"
         }], slack_messages)
 
@@ -343,7 +346,69 @@ class ReviewableToSlackTestCase(unittest.TestCase):
             'slack_message':
                 '_@guillaume needs your help to review their change ' +
                 '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '+@pascal_corpet_reviewer_1 \n' +
                 "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|check this code>!"
+        }], slack_messages)
+
+    def test_review_workflow_with_comments(self):
+        slack_messages = self._generate_slack_messages_for_new_ci_status('success')
+        self.assertEqual([], slack_messages, 'No message should be sent because no assignees yet')
+
+        slack_messages = self._generate_slack_messages_for_new_comment(
+            'pascal_corpet_reviewer_1',
+            'Just a main comment\n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, 7 unresolved discussions.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5624#-:-Kw6tJ-mUi9Zk7yDWBhl:b-2cl5iy)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
+        )
+        self.assertEqual([{
+            'slack_channel': '@guillaume',
+            'slack_message':
+                '_@pascal has commented on your change ' +
+                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                'Just a main comment\n' +
+                "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|check " +
+                'their feedback>!'
+        }], slack_messages)
+
+        slack_messages = self._generate_slack_messages_for_new_comment(
+            'pascal_corpet_reviewer_1',
+            '\n\n\n\nReview status: 0 of 2 files reviewed at latest revision, 8 unresolved discussions.\n\n---\n\n*[read.py, line 12 at r1](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5624#-Kw6tNCueHoFxBbI17mF:-Kw6tNCueHoFxBbI17mG:b-dkolgk) ([raw file](https://github.com/bayesimpact/bob-emploi/blob/fa3d3272eb54dd2b83cd12dfe50250820136e652/read.py#L12)):*\n> ```Python\n> \n> *[analytics/manual/florian/count_daily_new_users.js, line 14 at r1](https://reviewable.io:443/reviews/bayesimpact/paul-emploi/5605#-KuAr7g0aWZQDlhV-xK2:-KuLeNE8twZyir07I4SU:b3ksv) ([raw file](https://github.com/bayesimpact/paul-emploi/blob/c7336c7fa316745c2bd290fad6686591a1edf5dd/analytics/manual/florian/count_daily_new_users.js#L14)):*\n> <details><summary><i>Previously, florianjourda (Florian Jourda) wrote\xe2\x80\xa6</i></summary><blockquote>\n> ```\n\nJust an inline comment\n\n---\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5624)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
+        )
+        self.assertEqual([{
+            'slack_channel': '@guillaume',
+            'slack_message':
+                '_@pascal has commented on your change ' +
+                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '1 inline comment\n' +
+                "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|check " +
+                'their feedback>!'
+        }], slack_messages)
+
+        slack_messages = self._generate_slack_messages_for_new_comment(
+            'pascal_corpet_reviewer_1',
+            'A main comment\n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, 11 unresolved discussions.\n\n---\n\n*[read.py, line 5 at r1](https://reviewable.io:443/reviews/bayesimpact/bob-emploi-internal/5624#-Kw7NQJbPmHzdQslpGbV:-Kw7NQJbPmHzdQslpGbW:bmrfpc0) ([raw file](https://github.com/bayesimpact/bob-emploi-internal/blob/fa3d3272eb54dd2b83cd12dfe50250820136e652/read.py#L5)):*\n> ```Python\n> text = \"\"\"\n> ```\n\nand one inline comment\n\n---\n\n*[read.py, line 6 at r1](https://reviewable.io:443/reviews/bayesimpact/bob-emploi-internal/5624#-Kw7NTaWPJ28AxdXHXsS:-Kw7NTaWPJ28AxdXHXsT:b-bjn54z) ([raw file](https://github.com/bayesimpact/bob-emploi-internal/blob/fa3d3272eb54dd2b83cd12dfe50250820136e652/read.py#L6)):*\n> ```Python\n> \n> ```\n\nand another one inline comment\n\n---\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi-internal/5624#-:-Kw7NOBweIegoIJvYznd:b-jw3j2c)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
+        )
+        self.assertEqual([{
+            'slack_channel': '@guillaume',
+            'slack_message':
+                '_@pascal has commented on your change ' +
+                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                'A main comment\n' +
+                'and 2 inline comments\n' +
+                "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|check " +
+                'their feedback>!'
+        }], slack_messages)
+
+        slack_messages = self._generate_slack_messages_for_new_comment(
+            'pascal_corpet_reviewer_1',
+            'A comment directly from Github without the Reviewable parts.',
+        )
+        self.assertEqual([{
+            'slack_channel': '@guillaume',
+            'slack_message':
+                '_@pascal has commented on your change ' +
+                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                'A comment directly from Github without the Reviewable parts.\n' +
+                "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|check " +
+                'their feedback>!'
         }], slack_messages)
 
     def test_error_message_when_assigned_to_unknown_user(self):
