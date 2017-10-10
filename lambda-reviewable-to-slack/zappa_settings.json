@@ -1,13 +1,10 @@
 {
   "prod": {
-    "project_name": "lambda-reviewable-to-slack",
+    "project_name": "reviewable-to-slack",
     "app_function": "reviewable_to_slack.app",
     "lambda_description": "Integration to ping engineers on Slack when Github notification arrive.",
     "runtime": "python3.6",
     "s3_bucket": "lambda-reviewable-to-slack-prod-repo",
-    "aws_environment_variables": {
-      "REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL": "@florian"
-    }
   },
   "dev": {
     "extends": "prod",
