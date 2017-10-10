@@ -139,19 +139,10 @@ _GITHUB_PERSONAL_ACCESS_TOKEN = os.getenv('GITHUB_PERSONAL_ACCESS_TOKEN', '')
 # TODO(pascal for florian): Please document all the regexp here, I'm a bit worried that this stops
 # working if any other tool (reviewable or our own CI) change its syntax. Also document what kind
 # of text they are capture if it's not obvious (like the github link regex)
-_REVIEWABLE_COMMENT_REGEX = re.compile(
-    r'^(?P<main_comment>(.|\n)*)\n\n(---)?\n\nReview status: (?P<review_status>.*)\n\n'
-    r'---\n\n(?P<inline_comments>(.|\n)*)$',
-    re.MULTILINE)
-_REVIEWABLE_INLINE_COMMENT_LINK_REGEX = re.compile(r'https://reviewable\.io[^)]+', re.MULTILINE)
 _REVIEWABLE_ASSIGN_REGEX = re.compile(r'\+@([\w]+)\b', re.MULTILINE)
 _REVIEWABLE_LGTM_REGEX = re.compile(r'<img class="emoji" title=":lgtm')
 _REVIEWABLE_HTML_EMOJI_REGEX = re.compile(r'<img class="emoji" title="([^"]+)"[^>]*>')
-# From:    https://reviewable.io/reviews/bayesimpact/bob-emploi/5750
-# Extract: repo: bayesimpact/bob-emploi
-#          issue_number: 5750
-_REVIEWABLE_URL_REGEX = re.compile(
-    r'https://reviewable.io/reviews/(?P<repo>[^/]+/[^/]+)/(?P<number>\d+)')
+
 
 _EVENT_SLACK_TEMPLATES = {
     ReviewableEvent.ASSIGNED: '{who} needs your help to review {whose_change}',
@@ -193,6 +184,10 @@ def _get_all_resources_for_issue_comment_event(github_notification):
     # TODO(florian): we use issue in our code but we actually want a pull request. GitHub just
     # happens to use them a bit one for the other, but here our code should be clearer.
     issue = github_notification['issue']
+    if 'pull_request' not in issue:
+        # This can happen when editing directly the source code on Github without going through a
+        # pull request.
+        raise NotEnoughDataException('No pull request')
     pull_request_url = issue['pull_request']['url']
     pull_request = _get_github_api_ressource(pull_request_url)
     statuses = _get_github_api_ressource(pull_request['statuses_url'])
@@ -285,7 +280,8 @@ def _generate_slack_messages_for_new_status_or_comment(
             to_user=to_user,
             call_to_action=call_to_action,
             pull_request=pull_request,
-            ci_url=ci_url))
+            ci_url=ci_url,
+            new_comment=new_comment))
 
     # Here is all the logic tree about what message to send to whom.
     if not ci_status or ci_status == 'pending':
@@ -377,7 +373,8 @@ def _get_lgtm_givers(comments):
     return lgtm_givers
 
 
-def _generate_slack_message(from_user, event, to_user, call_to_action, pull_request, ci_url):
+def _generate_slack_message(
+        from_user, event, to_user, call_to_action, pull_request, ci_url, new_comment):
     slack_login = _get_slack_login(to_user)
     if slack_login in _DISABLED_SLACK_LOGINS:
         return {}
@@ -387,9 +384,10 @@ def _generate_slack_message(from_user, event, to_user, call_to_action, pull_requ
         repository_name, pull_request['number'])
     event_slack_string = _generate_event_slack_string(
         from_user, event, to_user, pull_request, code_review_url)
+    comment_recap = _generate_comment_recap(new_comment) if new_comment else ''
     call_to_action_string = _generate_call_to_action_slack_string(
         call_to_action, code_review_url, ci_url)
-    slack_message = '_{}:_\n{}'.format(event_slack_string, call_to_action_string)
+    slack_message = '_{}:_\n{}{}'.format(event_slack_string, comment_recap, call_to_action_string)
     return {slack_channel: slack_message}
 
 
@@ -402,7 +400,8 @@ def _get_slack_login(github_login):
     return slack_login
 
 
-def _generate_event_slack_string(from_user, event, to_user, pull_request, code_review_url):
+def _generate_event_slack_string(
+        from_user, event, to_user, pull_request, code_review_url):
     if from_user == to_user:
         who = 'You'
     else:
@@ -427,20 +426,30 @@ def _generate_call_to_action_slack_string(call_to_action, code_review_url, ci_ur
     return call_to_action_slack_string
 
 
+def _generate_comment_recap(new_comment):
+    comment_recap = ''
+    main_comment, inline_comment_count = _get_comment_parts(new_comment['body'])
+    if inline_comment_count:
+        inline_comment_count_sentence = '{} inline comment{}'.format(
+            inline_comment_count, '' if inline_comment_count == 1 else 's')
+        comment_recap = main_comment + '\nand ' + inline_comment_count_sentence\
+            if main_comment else inline_comment_count_sentence
+    else:
+        comment_recap = main_comment
+    return comment_recap + '\n'
+
+
 def _get_comment_parts(comment_body):
-    match = _REVIEWABLE_COMMENT_REGEX.match(comment_body)
-    if not match:
-        return {'main_comment': _replace_emoji_image_by_emoji_name(comment_body)}
-    match_dict = match.groupdict()
-    inline_comments_block = match_dict['inline_comments']
-    inline_comment_links = _REVIEWABLE_INLINE_COMMENT_LINK_REGEX.findall(inline_comments_block)
-    inline_comment_links = inline_comment_links[:-1]
-    comment_info = match.groupdict()
-    comment_info.update({
-        'main_comment': _replace_emoji_image_by_emoji_name(match_dict['main_comment']),
-        'inline_comment_links': inline_comment_links,
-    })
-    return comment_info
+    # If there is no main comment the format of the comment is a bit weird at the beginning,
+    # and needs to be normalized to allow us to split the different part more easily.
+    comment_body = re.sub(r'^\n\n\n\nReview status:', r'\n\n---\n\nReview status:', comment_body)
+    comment_parts = comment_body.split('\n\n---\n\n')
+    # main_comment will be '' if the substitution happened above.
+    main_comment = _replace_emoji_image_by_emoji_name(comment_parts[0])
+    unused_review_status = comment_parts[1]
+    inline_comments = comment_parts[2:-1]
+    inline_comment_count = len(inline_comments)
+    return main_comment, inline_comment_count
 
 
 def _replace_emoji_image_by_emoji_name(html_text):
@@ -452,7 +461,9 @@ def _get_github_api_ressource(ressource_url):
     if not _GITHUB_PERSONAL_ACCESS_TOKEN:
         raise SetupException('Need to define _GITHUB_PERSONAL_ACCESS_TOKEN env variable.')
     auth = tuple(_GITHUB_PERSONAL_ACCESS_TOKEN.split(':'))
-    response = requests.get(ressource_url, auth=auth)
+    # TODO(florian): Get items on page > 1 if necessary.
+    per_page = ('&' if '?' in ressource_url else '?') + 'per_page=100'
+    response = requests.get(ressource_url + per_page, auth=auth)
     if response.status_code != 200:
         raise ExecutionException('Could not retrieve object from Github API:\n{}\n{}: {}'.format(
             ressource_url, response.status_code, response.text
