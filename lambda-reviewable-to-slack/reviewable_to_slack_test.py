@@ -243,12 +243,14 @@ class ReviewableToSlackTestCase(unittest.TestCase):
     def test_review_workflow_when_adding_assignee_before_demo_is_ready(self):
         slack_messages = self._generate_slack_messages_for_new_ci_status('pending')
         self.assertEqual([], slack_messages, 'No message expected before CI is done')
+
         slack_messages = self._generate_slack_messages_for_new_comment(
             'guillaume_chaslot_reviewee',
             '+@pascal_corpet_reviewer_1 \n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5670#-:-KusZEAfCXr76VdJBPDn:bv2wshd)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
             ['pascal_corpet_reviewer_1']
         )
         self.assertEqual([], slack_messages, 'No message expected before CI is done')
+
         slack_messages = self._generate_slack_messages_for_new_ci_status('success')
         self.assertEqual([{
             'slack_channel': '@pascal',
@@ -258,9 +260,79 @@ class ReviewableToSlackTestCase(unittest.TestCase):
                 "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|check this code>!"
         }], slack_messages)
 
+        slack_messages = self._generate_slack_messages_for_new_comment(
+            'pascal_corpet_reviewer_1',
+            '<img class="emoji" title=":lgtm:" alt=":lgtm:" align="absmiddle" src="https://reviewable.io/lgtm.png" height="20" width="61"/>\n\n---\n\nReview status: 0 of 3 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5793#-:-Kw5Z15u5QTh2NU8A0MJ:bnfp4nl)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
+        )
+        self.assertEqual([{
+            'slack_channel': '@guillaume',
+            'slack_message':
+                '_@pascal has approved your change ' +
+                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                "Let's `git submit`!"
+        }], slack_messages)
+
+    def test_review_workflow_when_adding_two_assignees(self):
+        slack_messages = self._generate_slack_messages_for_new_ci_status('pending')
+        self.assertEqual([], slack_messages, 'No message expected before CI is done')
+
+        slack_messages = self._generate_slack_messages_for_new_comment(
+            'guillaume_chaslot_reviewee',
+            '+@pascal_corpet_reviewer_1 \n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5670#-:-KusZEAfCXr76VdJBPDn:bv2wshd)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
+            ['pascal_corpet_reviewer_1']
+        )
+        self.assertEqual([], slack_messages, 'No message expected before CI is done')
+
+        slack_messages = self._generate_slack_messages_for_new_comment(
+            'guillaume_chaslot_reviewee',
+            '+@john_metois_reviewer_2 \n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5670#-:-KusZEAfCXr76VdJBPDn:bv2wshd)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
+            ['john_metois_reviewer_2']
+        )
+        self.assertEqual([], slack_messages, 'No message expected before CI is done')
+
+        slack_messages = self._generate_slack_messages_for_new_ci_status('success')
+        self.assertEqual([{
+            'slack_channel': '@john',
+            'slack_message':
+                '_@guillaume needs your help to review their change ' +
+                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|check this code>!"
+        }, {
+            'slack_channel': '@pascal',
+            'slack_message':
+                '_@guillaume needs your help to review their change ' +
+                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|check this code>!"
+        }], sorted(slack_messages, key=lambda message: message['slack_channel']))
+
+        slack_messages = self._generate_slack_messages_for_new_comment(
+            'pascal_corpet_reviewer_1',
+            '<img class="emoji" title=":lgtm:" alt=":lgtm:" align="absmiddle" src="https://reviewable.io/lgtm.png" height="20" width="61"/>\n\n---\n\nReview status: 0 of 3 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5793#-:-Kw5Z15u5QTh2NU8A0MJ:bnfp4nl)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
+        )
+        self.assertEqual([{
+            'slack_channel': '@guillaume',
+            'slack_message':
+                '_@pascal has approved your change ' +
+                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                'You now need to wait for the other reviewers.'
+        }], slack_messages)
+
+        slack_messages = self._generate_slack_messages_for_new_comment(
+            'john_metois_reviewer_2',
+            '<img class="emoji" title=":lgtm_strong:" alt=":lgtm:" align="absmiddle" src="https://reviewable.io/lgtm_strong.png" height="20" width="61"/>\n\n---\n\nReview status: 0 of 3 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5793#-:-Kw5Z15u5QTh2NU8A0MJ:bnfp4nl)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
+        )
+        self.assertEqual([{
+            'slack_channel': '@guillaume',
+            'slack_message':
+                '_@john has approved your change ' +
+                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                "Let's `git submit`!"
+        }], slack_messages)
+
     def test_review_workflow_when_adding_assignee_after_demo_is_ready(self):
         slack_messages = self._generate_slack_messages_for_new_ci_status('success')
         self.assertEqual([], slack_messages, 'No message should be sent because no assignees yet')
+
         slack_messages = self._generate_slack_messages_for_new_comment(
             'guillaume_chaslot_reviewee',
             '+@pascal_corpet_reviewer_1 \n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5670#-:-KusZEAfCXr76VdJBPDn:bv2wshd)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
@@ -276,6 +348,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
 
     def test_error_message_when_assigned_to_unknown_user(self):
         slack_messages = self._generate_slack_messages_for_new_ci_status('success')
+
         slack_messages = self._generate_slack_messages_for_new_comment(
             'guillaume_chaslot_reviewee',
             '+@gandalf \n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5670#-:-KusZEAfCXr76VdJBPDn:bv2wshd)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long

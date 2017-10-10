@@ -145,6 +145,7 @@ _REVIEWABLE_COMMENT_REGEX = re.compile(
     re.MULTILINE)
 _REVIEWABLE_INLINE_COMMENT_LINK_REGEX = re.compile(r'https://reviewable\.io[^)]+', re.MULTILINE)
 _REVIEWABLE_ASSIGN_REGEX = re.compile(r'\+@([\w]+)\b', re.MULTILINE)
+_REVIEWABLE_LGTM_REGEX = re.compile(r'<img class="emoji" title=":lgtm')
 _REVIEWABLE_HTML_EMOJI_REGEX = re.compile(r'<img class="emoji" title="([^"]+)"[^>]*>')
 # From:    https://reviewable.io/reviews/bayesimpact/bob-emploi/5750
 # Extract: repo: bayesimpact/bob-emploi
@@ -176,6 +177,10 @@ def generate_slack_messages(github_event_type, github_notification):
     if github_event_type == 'issue_comment':
         github_event_params = _get_all_resources_for_issue_comment_event(github_notification)
     elif github_event_type == 'status':
+        if github_notification['context'].startswith('code-review/reviewable'):
+            # We use only comments instead of code-review status to signal which users have given
+            # a lgtm.
+            return {}
         github_event_params = _get_all_resources_for_status_event(github_notification)
     else:
         # We deal only with new comments and new CI/code review status notifications.
@@ -209,13 +214,7 @@ def _get_all_resources_for_status_event(github_notification):
     """Fetch on Github API resources that are missing in the 'status' notification."""
     # Unfortunately 'status' event don't contain 'issue' data, so we need to fetch it.
     new_status = github_notification
-    if new_status['context'].startswith('code-review/reviewable'):
-        repo_and_number =\
-            _REVIEWABLE_URL_REGEX.match(github_notification['target_url']).groupdict()
-        pull_request_url = 'https://api.github.com/repos/{repo}/pulls/{number}'.format(
-            **repo_and_number)
-        pull_request = _get_github_api_ressource(pull_request_url)
-    elif new_status['context'].startswith('ci/circleci'):
+    if new_status['context'].startswith('ci/circleci'):
         filter_for_branch = '?base=master&head={}:{}'.format(
             new_status['repository']['owner']['login'], new_status['branches'][0]['name'])
         pull_request_url = new_status['repository']['pulls_url'].replace(
@@ -257,9 +256,11 @@ def _generate_slack_messages_for_new_status_or_comment(
     commentors = {comment['user']['login'] for comment in comments}
     new_commentor = new_comment['user']['login'] if new_comment else None
 
-    ci_status, ci_url, lgtm_givers = _get_ci_and_code_review_status(statuses)
-    new_ci_status, unused_new_ci_url, new_lgtm_givers = _get_ci_and_code_review_status(
+    ci_status, ci_url = _get_ci_status(statuses)
+    new_ci_status, unused_new_ci_url = _get_ci_status(
         [new_status] if new_status else [])
+    lgtm_givers = _get_lgtm_givers(comments)
+    new_lgtm_givers = _get_lgtm_givers([new_comment] if new_comment else [])
     # Make sure we don't count lgtm from user that were not assignees.
     has_assignees_without_lgtm = bool(assignees - lgtm_givers)
 
@@ -346,18 +347,17 @@ def _generate_slack_messages_for_new_status_or_comment(
     return slack_messages
 
 
-def _get_ci_and_code_review_status(all_statuses):
-    """Return the continous integration and code review status of the pull request.
+def _get_ci_status(statuses):
+    """Return the continous integration status of the pull request.
 
     Return None when the statuses did not give any info about the respective status.
     """
     # Check the format of statuses here: https://developer.github.com/v3/repos/statuses/
     # TODO(add more doc abou the different event formats)
-    all_statuses = sorted(all_statuses, key=lambda status: status['context'])
-    statuses_by_context = itertools.groupby(all_statuses, key=lambda status: status['context'])
+    statuses = sorted(statuses, key=lambda status: status['context'])
+    statuses_by_context = itertools.groupby(statuses, key=lambda status: status['context'])
     ci_status = None
     ci_url = None
-    lgtm_givers = set()
     for context, context_statuses in statuses_by_context:
         if context.startswith('ci/'):
             last_status = max(context_statuses, key=lambda status: status['updated_at'])
@@ -365,19 +365,16 @@ def _get_ci_and_code_review_status(all_statuses):
             ci_status = last_status['state']
             ci_url = last_status['target_url']
             continue
+    return ci_status, ci_url
 
-        if context.startswith('code-review/'):
-            def _get_reviewer_login(status):
-                return status['creator']['login']
-            code_review_statuses = sorted(
-                context_statuses, key=_get_reviewer_login)
-            statuses_by_user = itertools.groupby(
-                code_review_statuses, key=_get_reviewer_login)
-            for user_login, user_statuses in statuses_by_user:
-                last_status = max(user_statuses, key=lambda status: status['updated_at'])
-                if last_status['state'] == 'success':
-                    lgtm_givers.add(user_login)
-    return ci_status, ci_url, lgtm_givers
+
+def _get_lgtm_givers(comments):
+    """Return which users have given a lgtm in the previous comments."""
+    lgtm_givers = {
+        comment['user']['login'] for comment in comments
+        if _REVIEWABLE_LGTM_REGEX.match(comment['body'])
+    }
+    return lgtm_givers
 
 
 def _generate_slack_message(from_user, event, to_user, call_to_action, pull_request, ci_url):
