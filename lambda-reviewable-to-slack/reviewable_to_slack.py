@@ -18,6 +18,9 @@ _ERROR_SLACK_CHANNEL = os.getenv('ERROR_SLACK_CHANNEL')
 _DISABLED_SLACK_LOGINS = set(json.loads(os.getenv('DISABLED_SLACK_LOGINS', '[]')))
 # The following variable is used for development, to check what messages are sent to all users.
 _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL = os.getenv('REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL')
+# Token to post messages on Slack. Can be retrieved in https://api.slack.com/apps/A74SCPGAK/oauth.
+_SLACK_APP_BOT_TOKEN = os.getenv('SLACK_APP_BOT_TOKEN')
+_SLACK_POST_MESSAGE_ENDPOINT = 'https://slack.com/api/chat.postMessage'
 
 app = flask.Flask(__name__)  # pylint: disable=invalid-name
 
@@ -56,34 +59,27 @@ def handle_github_notification():
                 'Error: {}\n\n{}\n'.format(err, traceback.format_exc())
         }
         status_code = 500
-    # TODO(florian): Call Slack directly.
-    zapier_to_slack_endpoint = 'https://hooks.zapier.com/hooks/catch/1946029/iy46wx/'
-    if not slack_messages:
-        # Don't ping anybody about no-op, even if _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL is set
-        # because this creates way too many notifications.
-        zapier_slack_payloads = []
-    elif _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL:
+
+    if slack_messages and _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL:
         # To debug the integration, send only one message with all the info to the channel used
         # to test.
         all_messages_in_one = 'Messages from Reviewable:\n' + ('\n\n'.join([
             'To {}:\n{}'.format(slack_channel, slack_message)
             for slack_channel, slack_message in slack_messages.items()
         ]) if slack_messages else 'None')
-        zapier_slack_payloads = [{
-            'slack_channel': _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL,
-            'slack_message': all_messages_in_one,
-        }]
-    else:
-        zapier_slack_payloads = [
-            {'slack_channel': slack_channel, 'slack_message': slack_message}
-            for slack_channel, slack_message in slack_messages.items()
-        ]
+        slack_messages = {_REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL: all_messages_in_one}
 
-    for zapier_slack_payload in zapier_slack_payloads:
-        response = requests.post(zapier_to_slack_endpoint, json=zapier_slack_payload)
+    # Ping on Slack.
+    for slack_channel, slack_message in slack_messages.items():
+        response = requests.post(_SLACK_POST_MESSAGE_ENDPOINT, data={
+            'token': _SLACK_APP_BOT_TOKEN,
+            'channel': slack_channel,
+            'text': slack_message,
+            'as_user': True,
+        })
         if response.status_code != 200:
             return 'Error with Slack:\n{} {}'.format(response.status_code, response.text), 500
-    return json.dumps(zapier_slack_payloads), status_code
+    return json.dumps(slack_messages), status_code
 
 
 def _get_missing_env_vars_error_message():
@@ -93,6 +89,9 @@ def _get_missing_env_vars_error_message():
             '{"florianjourda": "florian"}\n'
     if not _ERROR_SLACK_CHANNEL:
         error_message += 'Need to set up ERROR_SLACK_CHANNEL as env var in the format: #general'
+    if not _SLACK_APP_BOT_TOKEN:
+        error_message += 'Need to set up _SLACK_APP_BOT_TOKEN as env var in the format. Get it ' +\
+            'from https://api.slack.com/apps/A74SCPGAK/oauth'
     return error_message
 
 
