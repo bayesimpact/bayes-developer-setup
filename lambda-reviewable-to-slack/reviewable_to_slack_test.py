@@ -126,7 +126,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
             state,
             creator,
             target_url,
-            sha=None):
+            **kwargs):
         """Return a new status in Github and create Github notification."""
         status = {
             'id': self._status_id,
@@ -143,9 +143,9 @@ class ReviewableToSlackTestCase(unittest.TestCase):
                 'pulls_url': 'https://api.github.com/repos/bayesimpact/bob-emploi/pulls{/number}',
             },
         }
+        # Allow to overwrite any field.
+        status.update(**kwargs)
         self._status_id = self._status_id + 1
-        if sha:
-            status['sha'] = sha
         # Github orders statuses in reverse chronological order.
         self._github_statuses.insert(0, status)
         github_notification = status
@@ -185,14 +185,15 @@ class ReviewableToSlackTestCase(unittest.TestCase):
             for github_login in self._github_assignees
         ]
 
-    def _generate_slack_messages_for_new_ci_status(self, state):  # pylint: disable=invalid-name
+    def _generate_slack_messages_for_new_ci_status(self, state, **kwargs):  # nopep8 # pylint: disable=line-too-long,invalid-name
         """Get the Slack messages that would be generate when a new CI statis is created."""
         github_notification = self._simulate_notification_for_new_status(
             context='ci/circleci: build-and-test',
             state=state,
             creator='guillaume_chaslot_reviewee',
+            target_url='https://circleci.com/gh/bayesimpact/bob-emploi/13420',
             sha='353ff7e711d0dab6cff5e7e90026c7f8eff05016',
-            target_url='https://circleci.com/gh/bayesimpact/bob-emploi/13420')
+            **kwargs)
         slack_messages = self._handle_github_notification('status', github_notification)
         return slack_messages
 
@@ -235,6 +236,11 @@ class ReviewableToSlackTestCase(unittest.TestCase):
                 "Let's <https://circleci.com/gh/bayesimpact/bob-emploi/13420|check what the " +
                 'problem is>.',
         }, slack_messages)
+
+    def test_ignore_notifications_on_master(self):
+        slack_messages = self._generate_slack_messages_for_new_ci_status(
+            'failure', branches=[{'name': 'master'}])
+        self.assertEqual({}, slack_messages)
 
     @mock.patch('reviewable_to_slack._DISABLED_SLACK_LOGINS', {'guillaume'})
     def test_disable_slack_login_does_not_get_message(self):

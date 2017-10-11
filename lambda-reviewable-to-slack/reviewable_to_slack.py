@@ -170,6 +170,11 @@ def generate_slack_messages(github_event_type, github_notification):
     if github_event_type == 'issue_comment':
         github_event_params = _get_all_resources_for_issue_comment_event(github_notification)
     elif github_event_type == 'status':
+        if github_notification['branches'][0]['name'] == 'master':
+            # We ignore notifications on master.
+            # TODO(florian): Add message when breaking CI on master.
+            return {}
+
         if github_notification['context'].startswith('code-review/reviewable'):
             # We use only comments instead of code-review status to signal which users have given
             # an LGTM.
