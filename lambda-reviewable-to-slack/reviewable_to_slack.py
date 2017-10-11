@@ -219,7 +219,8 @@ def _get_all_resources_for_status_event(github_notification):
             '{/number}', filter_for_branch)
         pull_requests = _get_github_api_ressource(pull_request_url)
         if len(pull_requests) != 1:
-            raise ExecutionException('Did not find a single pull_request: {}'.format(pull_requests))
+            raise NotEnoughDataException('Did not find a single pull_request: {}'.format(
+                pull_requests))
         pull_request = pull_requests[0]
     else:
         raise ExecutionException(
