@@ -465,7 +465,8 @@ def _generate_event_slack_string(
         whose = 'their'
     else:
         whose = '@' + _get_slack_login(reviewee) + "'s"
-    whose_change = '{} change <{}|{}>'.format(whose, code_review_url, pull_request['title'])
+    title_without_trailing_dot = str.rstrip(pull_request['title'], '.')
+    whose_change = '{} change <{}|{}>'.format(whose, code_review_url, title_without_trailing_dot)
 
     event_slack_string = _EVENT_SLACK_TEMPLATES[event].format(who=who, whose_change=whose_change)
     return event_slack_string

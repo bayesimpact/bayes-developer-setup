@@ -14,6 +14,7 @@ _GITHUB_TO_SLACK_LOGIN = {
 }
 _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL = ''
 _SLACK_APP_BOT_TOKEN = 'xoxb-253193681994-onkkBrKsdXxcNCyeXygMMBjc'
+_CHANGE = '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>'
 
 
 @mock.patch('reviewable_to_slack._GITHUB_TO_SLACK_LOGIN', _GITHUB_TO_SLACK_LOGIN)
@@ -46,7 +47,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         self._github_issue_statuses = []
         self._github_pull_request = {
             'number': 5670,
-            'title': 'Fixed some bug',
+            'title': 'Fixed some bug.',
             'user': {'login': 'guillaume_chaslot_reviewee'},
             'assignees': [],
             'comments_url':
@@ -232,17 +233,15 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         slack_messages = self._generate_slack_messages_for_new_ci_status('failure')
         self.assertEqual({
             '@guillaume':
-                '_❗️ Continuous integration tests failed for your change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
-                "Let's <https://circleci.com/gh/bayesimpact/bob-emploi/13420|check what the " +
+                '_❗️ Continuous integration tests failed for your change ' + _CHANGE + ':_\n'
+                "Let's <https://circleci.com/gh/bayesimpact/bob-emploi/13420|check what the "
                 'problem is>.',
         }, slack_messages)
 
         slack_messages = self._generate_slack_messages_for_new_ci_status('success')
         self.assertEqual({
             '@guillaume':
-                '_✅ Continuous integration tests fixed for your change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_✅ Continuous integration tests fixed for your change ' + _CHANGE + ':_\n'
                 "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|" +
                 'add reviewers>!'
                 '',
@@ -259,8 +258,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         slack_messages = self._generate_slack_messages_for_new_ci_status('failure')
         self.assertEqual({
             '@guillaume':
-                '_❗️ Continuous integration tests failed for your change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_❗️ Continuous integration tests failed for your change ' + _CHANGE + ':_\n'
                 "Let's <https://circleci.com/gh/bayesimpact/bob-emploi/13420|check what the " +
                 'problem is>.',
         }, slack_messages)
@@ -268,12 +266,10 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         slack_messages = self._generate_slack_messages_for_new_ci_status('success')
         self.assertEqual({
             '@guillaume':
-                '_✅ Continuous integration tests fixed for your change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_✅ Continuous integration tests fixed for your change ' + _CHANGE + ':_\n'
                 'The reviewers have now been asked to review.',
             '@pascal':
-                '_@guillaume needs your help to review their change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_@guillaume needs your help to review their change ' + _CHANGE + ':_\n'
                 "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|" +
                 'check this code>!',
         }, slack_messages)
@@ -302,8 +298,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         slack_messages = self._generate_slack_messages_for_new_ci_status('success')
         self.assertEqual({
             '@pascal':
-                '_@guillaume needs your help to review their change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_@guillaume needs your help to review their change ' + _CHANGE + ':_\n'
                 "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|" +
                 'check this code>!',
         }, slack_messages)
@@ -314,8 +309,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         )
         self.assertEqual({
             '@guillaume':
-                '_@pascal has approved your change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_@pascal has approved your change ' + _CHANGE + ':_\n'
                 ':lgtm:\n' +
                 "Let's `git submit`!",
         }, slack_messages)
@@ -341,13 +335,11 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         slack_messages = self._generate_slack_messages_for_new_ci_status('success')
         self.assertEqual({
             '@john':
-                '_@guillaume needs your help to review their change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_@guillaume needs your help to review their change ' + _CHANGE + ':_\n'
                 "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|" +
                 'check this code>!',
             '@pascal':
-                '_@guillaume needs your help to review their change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_@guillaume needs your help to review their change ' + _CHANGE + ':_\n'
                 "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|" +
                 'check this code>!',
         }, slack_messages)
@@ -358,8 +350,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         )
         self.assertEqual({
             '@guillaume':
-                '_@pascal has approved your change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_@pascal has approved your change ' + _CHANGE + ':_\n'
                 ':lgtm:\n' +
                 'You now need to wait for the other reviewers.',
         }, slack_messages)
@@ -370,8 +361,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         )
         self.assertEqual({
             '@guillaume':
-                '_@john has approved your change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_@john has approved your change ' + _CHANGE + ':_\n'
                 ':lgtm_strong:\n' +
                 "Let's `git submit`!",
         }, slack_messages)
@@ -380,8 +370,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         slack_messages = self._generate_slack_messages_for_new_ci_status('success')
         self.assertEqual({
             '@guillaume':
-                '_Continuous integration tests succeeded for your change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_Continuous integration tests succeeded for your change ' + _CHANGE + ':_\n'
                 "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|" +
                 'add reviewers>!'
         }, slack_messages)
@@ -393,8 +382,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         )
         self.assertEqual({
             '@pascal':
-                '_@guillaume needs your help to review their change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_@guillaume needs your help to review their change ' + _CHANGE + ':_\n'
                 '+@pascal_corpet_reviewer_1 \n' +
                 "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|" +
                 'check this code>!'
@@ -421,8 +409,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         )
         self.assertEqual({
             '@guillaume':
-                '_@pascal has commented on your change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_@pascal has commented on your change ' + _CHANGE + ':_\n'
                 'Just a main comment\n' +
                 "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|check " +
                 'their feedback>!',
@@ -434,8 +421,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         )
         self.assertEqual({
             '@guillaume':
-                '_@pascal has commented on your change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_@pascal has commented on your change ' + _CHANGE + ':_\n'
                 '1 inline comment\n' +
                 "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|check " +
                 'their feedback>!',
@@ -447,8 +433,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         )
         self.assertEqual({
             '@guillaume':
-                '_@pascal has commented on your change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_@pascal has commented on your change ' + _CHANGE + ':_\n'
                 'A main comment\n' +
                 'and 2 inline comments\n' +
                 "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|check " +
@@ -461,8 +446,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         )
         self.assertEqual({
             '@guillaume':
-                '_@pascal has commented on your change ' +
-                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                '_@pascal has commented on your change ' + _CHANGE + ':_\n'
                 'A comment directly from Github without the Reviewable parts.\n' +
                 "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|check " +
                 'their feedback>!',
