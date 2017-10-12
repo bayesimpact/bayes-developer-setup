@@ -165,6 +165,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
             'id': self._comment_id,
             'user': {'login': commentor},
             'body': comment_body,
+            'updated_at': self._get_fake_time(),
         }
         self._comment_id = self._comment_id + 1
         self._add_assignees(new_assignees)
@@ -227,7 +228,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
 
     # As the name of the tests are self-explanatory, we don't need docstrings for them.
     # pylint: disable=missing-docstring
-    def test_reviewee_is_warned_when_ci_fails(self):
+    def test_review_workflow_with_failure_and_fix_before_adding_reviewers(self):
         slack_messages = self._generate_slack_messages_for_new_ci_status('failure')
         self.assertEqual({
             '@guillaume':
@@ -235,6 +236,46 @@ class ReviewableToSlackTestCase(unittest.TestCase):
                 '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
                 "Let's <https://circleci.com/gh/bayesimpact/bob-emploi/13420|check what the " +
                 'problem is>.',
+        }, slack_messages)
+
+        slack_messages = self._generate_slack_messages_for_new_ci_status('success')
+        self.assertEqual({
+            '@guillaume':
+                '_✅ Continuous integration tests fixed for your change ' +
+                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|" +
+                'add reviewers>!'
+                '',
+        }, slack_messages)
+
+    def test_review_workflow_with_failure_and_fix_after_adding_reviewers(self):
+        slack_messages = self._generate_slack_messages_for_new_comment(
+            'guillaume_chaslot_reviewee',
+            '+@pascal_corpet_reviewer_1 \n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5670#-:-KusZEAfCXr76VdJBPDn:bv2wshd)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
+            ['pascal_corpet_reviewer_1']
+        )
+        self.assertEqual({}, slack_messages, 'No message expected before CI is done')
+
+        slack_messages = self._generate_slack_messages_for_new_ci_status('failure')
+        self.assertEqual({
+            '@guillaume':
+                '_❗️ Continuous integration tests failed for your change ' +
+                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                "Let's <https://circleci.com/gh/bayesimpact/bob-emploi/13420|check what the " +
+                'problem is>.',
+        }, slack_messages)
+
+        slack_messages = self._generate_slack_messages_for_new_ci_status('success')
+        self.assertEqual({
+            '@guillaume':
+                '_✅ Continuous integration tests fixed for your change ' +
+                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                'The reviewers have now been asked to review.',
+            '@pascal':
+                '_@guillaume needs your help to review their change ' +
+                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|" +
+                'check this code>!',
         }, slack_messages)
 
     def test_ignore_notifications_on_master(self):
@@ -337,7 +378,13 @@ class ReviewableToSlackTestCase(unittest.TestCase):
 
     def test_review_workflow_when_adding_assignee_after_demo_is_ready(self):
         slack_messages = self._generate_slack_messages_for_new_ci_status('success')
-        self.assertEqual({}, slack_messages, 'No message should be sent because no assignees yet')
+        self.assertEqual({
+            '@guillaume':
+                '_Continuous integration tests succeeded for your change ' +
+                '<https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|Fixed some bug>:_\n' +
+                "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|" +
+                'add reviewers>!'
+        }, slack_messages)
 
         slack_messages = self._generate_slack_messages_for_new_comment(
             'guillaume_chaslot_reviewee',
@@ -354,8 +401,19 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         }, slack_messages)
 
     def test_review_workflow_with_comments(self):
+        slack_messages = self._generate_slack_messages_for_new_comment(
+            'guillaume_chaslot_reviewee',
+            '+@pascal_corpet_reviewer_1 \n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5670#-:-KusZEAfCXr76VdJBPDn:bv2wshd)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
+            ['pascal_corpet_reviewer_1']
+        )
+        self.assertEqual({}, slack_messages, 'No message expected before CI is done')
+
         slack_messages = self._generate_slack_messages_for_new_ci_status('success')
-        self.assertEqual({}, slack_messages, 'No message should be sent because no assignees yet')
+        slack_messages = self._generate_slack_messages_for_new_comment(
+            'guillaume_chaslot_reviewee',
+            '+@pascal_corpet_reviewer_1 \n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5670#-:-KusZEAfCXr76VdJBPDn:bv2wshd)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
+            ['pascal_corpet_reviewer_1']
+        )
 
         slack_messages = self._generate_slack_messages_for_new_comment(
             'pascal_corpet_reviewer_1',

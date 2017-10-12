@@ -96,27 +96,7 @@ def _get_missing_env_vars_error_message():
 
 
 GithubEventParams = collections.namedtuple('GithubEventParams', [
-    'pull_request', 'statuses', 'new_status', 'comments', 'new_comment'])
-
-
-class ReviewableEvent(enum.Enum):
-    """Enum for the different type of events that happened on Reviewable."""
-    ASSIGNED = 'ASSIGNED'
-    COMMENTED = 'COMMENTED'
-    RESPONDED = 'RESPONDED'
-    APPROVED = 'APPROVED'
-    CI_FAILED = 'CI_FAILED'
-
-
-class CallToAction(enum.Enum):
-    """Enum for the different type of action should be recommended to users on Slack."""
-    REVIEW = 'REVIEW'
-    SUBMIT = 'SUBMIT'
-    CHECK_FEEDBACK = 'CHECK_FEEDBACK'
-    CHECK_CHANGE = 'CHECK_CHANGE'
-    CHECK_CI = 'CHECK_CI'
-    ADDRESS_COMMENTS = 'ADDRESS_COMMENTS'
-    WAIT_FOR_OTHER_REVIEWERS = 'WAIT_FOR_OTHER_REVIEWERS'
+    'pull_request', 'ci_status_events', 'new_ci_status_event', 'comments', 'new_comment'])
 
 
 class SetupException(Exception):
@@ -146,12 +126,37 @@ _START_OF_REVIEWABLE_COMMENT_WITHOUT_SEPARATOR_REGEX = r'^\n\n\n\nReview status:
 _START_OF_REVIEWABLE_COMMENT_WITH_SEPARATOR_REGEX = r'\n\n---\n\nReview status:'
 
 
+class ReviewableEvent(enum.Enum):
+    """Enum for the different type of events that happened on Reviewable."""
+    ASSIGNED = 'ASSIGNED'
+    COMMENTED = 'COMMENTED'
+    RESPONDED = 'RESPONDED'
+    APPROVED = 'APPROVED'
+    CI_SUCCEEDED = 'CI_SUCCEEDED'
+    CI_FAILED = 'CI_FAILED'
+    CI_FIXED = 'CI_FIXED'
+
+
+class CallToAction(enum.Enum):
+    """Enum for the different type of action should be recommended to users on Slack."""
+    REVIEW = 'REVIEW'
+    SUBMIT = 'SUBMIT'
+    CHECK_FEEDBACK = 'CHECK_FEEDBACK'
+    CHECK_CHANGE = 'CHECK_CHANGE'
+    CHECK_CI = 'CHECK_CI'
+    ADDRESS_COMMENTS = 'ADDRESS_COMMENTS'
+    ADD_REVIEWERS = 'ADD_REVIEWERS'
+    WAIT_FOR_REVIEWERS = 'WAIT_FOR_REVIEWERS'
+    WAIT_FOR_OTHER_REVIEWERS = 'WAIT_FOR_OTHER_REVIEWERS'
+
 _EVENT_SLACK_TEMPLATES = {
     ReviewableEvent.ASSIGNED: '{who} needs your help to review {whose_change}',
     ReviewableEvent.COMMENTED: '{who} has commented on {whose_change}',
     ReviewableEvent.RESPONDED: '{who} has responsed to comments on {whose_change}',
     ReviewableEvent.APPROVED: '{who} has approved {whose_change}',
-    ReviewableEvent.CI_FAILED: '❗️ Continuous integration tests failed for {whose_change}'
+    ReviewableEvent.CI_SUCCEEDED: 'Continuous integration tests succeeded for {whose_change}',
+    ReviewableEvent.CI_FAILED: '❗️ Continuous integration tests failed for {whose_change}',
+    ReviewableEvent.CI_FIXED: '✅ Continuous integration tests fixed for {whose_change}',
 }
 
 _CALL_TO_ACTION_TEMPLATES = {
@@ -161,6 +166,8 @@ _CALL_TO_ACTION_TEMPLATES = {
     CallToAction.CHECK_CHANGE: "Let's <{code_review_url}|check what they have changed>!",
     CallToAction.CHECK_CI: "Let's <{ci_url}|check what the problem is>.",
     CallToAction.ADDRESS_COMMENTS: "Let's <{code_review_url}|address the remaining comments>.",
+    CallToAction.ADD_REVIEWERS: "Let's <{code_review_url}|add reviewers>!",
+    CallToAction.WAIT_FOR_REVIEWERS: 'The reviewers have now been asked to review.',
     CallToAction.WAIT_FOR_OTHER_REVIEWERS: 'You now need to wait for the other reviewers.',
 }
 
@@ -180,7 +187,7 @@ def generate_slack_messages(github_event_type, github_notification):
             # We use only comments instead of code-review status to signal which users have given
             # an LGTM.
             return {}
-        github_event_params = _get_all_resources_for_status_event(github_notification)
+        github_event_params = _get_all_resources_for_ci_status_event(github_notification)
     else:
         # We deal only with new comments and new CI/code review status notifications.
         return {}
@@ -199,8 +206,8 @@ def _get_all_resources_for_issue_comment_event(github_notification):
         raise NotEnoughDataException('No pull request')
     pull_request_url = issue['pull_request']['url']
     pull_request = _get_github_api_ressource(pull_request_url)
-    statuses = _get_github_api_ressource(pull_request['statuses_url'])
-    new_status = None
+    ci_status_events = _get_github_api_ressource(pull_request['statuses_url'])
+    new_ci_status_event = None
     comments = _get_github_api_ressource(pull_request['comments_url'])
     # Get the version of new_comment from the API instead of from the github notification.
     new_comment = next(
@@ -208,47 +215,54 @@ def _get_all_resources_for_issue_comment_event(github_notification):
         if comment['id'] == github_notification['comment']['id'])
     return GithubEventParams(
         pull_request=pull_request,
-        statuses=statuses,
-        new_status=new_status,
+        ci_status_events=ci_status_events,
+        new_ci_status_event=new_ci_status_event,
         comments=comments,
         new_comment=new_comment)
 
 
-def _get_all_resources_for_status_event(github_notification):
+def _get_all_resources_for_ci_status_event(github_notification):
     """Fetch on Github API resources that are missing in the 'status' notification."""
     # Unfortunately 'status' event don't contain 'issue' data, so we need to fetch it.
-    new_status = github_notification
-    if new_status['context'].startswith('ci/circleci'):
-        filter_for_branch = '?base=master&head={}:{}'.format(
-            new_status['repository']['owner']['login'], new_status['branches'][0]['name'])
-        pull_request_url = new_status['repository']['pulls_url'].replace(
-            '{/number}', filter_for_branch)
-        pull_requests = _get_github_api_ressource(pull_request_url)
-        if len(pull_requests) != 1:
-            raise NotEnoughDataException('Did not find a single pull_request: {}'.format(
-                pull_requests))
-        pull_request = pull_requests[0]
-    else:
+    new_status_event = github_notification
+    if not new_status_event['context'].startswith('ci/circleci'):
         raise ExecutionException(
-            "Does not support '{}' status context".format(new_status['context']))
+            "Does not support '{}' status context".format(new_status_event['context']))
+    new_ci_status_event = new_status_event
 
-    statuses = _get_github_api_ressource(pull_request['statuses_url'])
-    # Get the version of new_status from the API instead of from the github notification.
-    new_status = next(status for status in statuses if status['id'] == new_status['id'])
+    filter_for_branch = '?base=master&head={}:{}'.format(
+        new_ci_status_event['repository']['owner']['login'],
+        new_ci_status_event['branches'][0]['name'])
+    pull_request_url = new_ci_status_event['repository']['pulls_url'].replace(
+        '{/number}', filter_for_branch)
+    pull_requests = _get_github_api_ressource(pull_request_url)
+    if len(pull_requests) != 1:
+        raise NotEnoughDataException('Did not find a single pull_request: {}'.format(
+            pull_requests))
+    pull_request = pull_requests[0]
+
+    ci_status_events = _get_github_api_ressource(pull_request['statuses_url'])
+    # Get the version of new_ci_status_event from the API instead of from the github notification.
+    new_ci_status_event = next(
+        event for event in ci_status_events
+        if event['id'] == new_ci_status_event['id'])
     comments = _get_github_api_ressource(pull_request['comments_url'])
     new_comment = None
     return GithubEventParams(
         pull_request=pull_request,
-        statuses=statuses,
-        new_status=new_status,
+        ci_status_events=ci_status_events,
+        new_ci_status_event=new_ci_status_event,
         comments=comments,
         new_comment=new_comment)
 
 
 def _generate_slack_messages_for_new_status_or_comment(
-        pull_request, statuses, new_status, comments, new_comment):
+        pull_request, ci_status_events, new_ci_status_event, comments, new_comment):
     """Prepare all data we need to decide what messages to generate."""
-    # Note: new_comment is included in comments, and new_status in statuses.
+    # Make sure we did not get statuses and comments that arrived after the new status or comment.
+    # Note: new_comment is included in comments, and new_ci_status_event in ci_status_events.
+    ci_status_events = _get_dicts_before(ci_status_events, new_ci_status_event)
+    comments = _get_dicts_before(comments, new_comment)
     reviewee = pull_request['user']['login']
 
     assignees = {assignee['login'] for assignee in pull_request['assignees']}
@@ -261,9 +275,9 @@ def _generate_slack_messages_for_new_status_or_comment(
     commentors = {comment['user']['login'] for comment in comments}
     new_commentor = new_comment['user']['login'] if new_comment else None
 
-    ci_status, ci_url = _get_ci_status(statuses)
-    new_ci_status, unused_new_ci_url = _get_ci_status(
-        [new_status] if new_status else [])
+    new_ci_state = new_ci_status_event['state'] if new_ci_status_event else None
+    ci_state, ci_url, previous_not_pending_ci_state = _get_ci_states(ci_status_events)
+
     lgtm_givers = _get_lgtm_givers(comments)
     new_lgtm_givers = _get_lgtm_givers([new_comment] if new_comment else [])
     # Make sure we don't count LGTM from user that were not assignees.
@@ -276,10 +290,10 @@ def _generate_slack_messages_for_new_status_or_comment(
 
     if new_commentor:
         from_user = new_commentor
-    elif new_ci_status:
+    elif new_ci_state:
         from_user = reviewee
     else:
-        from_user = new_status['creator']['login']
+        from_user = new_ci_status_event['creator']['login']
     slack_messages = {}
 
     def add_slack_message(to_user, event, call_to_action):
@@ -294,19 +308,28 @@ def _generate_slack_messages_for_new_status_or_comment(
             new_comment=new_comment))
 
     # Here is all the logic tree about what message to send to whom.
-    if not ci_status or ci_status == 'pending':
+    if not ci_state or ci_state == 'pending':
         # Don't ping anyone if CI is not done!
         return {}
 
-    if new_ci_status == 'failure':
+    if new_ci_state == 'failure':
         # CI tests just failed, warn the reviewee.
         add_slack_message(reviewee, ReviewableEvent.CI_FAILED, CallToAction.CHECK_CI)
         return slack_messages
 
-    if new_ci_status == 'success':
+    if new_ci_state == 'success':
         # The CI is now ready so we should ask the assignees to review it.
         for assignee in assignees:
             add_slack_message(assignee, ReviewableEvent.ASSIGNED, CallToAction.REVIEW)
+        # If the CI if fixed we should tell the reviewee.
+        if previous_not_pending_ci_state == 'failure':
+            add_slack_message(
+                reviewee, ReviewableEvent.CI_FIXED,
+                CallToAction.WAIT_FOR_REVIEWERS if assignees else CallToAction.ADD_REVIEWERS)
+        # If this is the first time the CI passes, we offer to add reviewers
+        elif not assignees:
+            add_slack_message(reviewee, ReviewableEvent.CI_SUCCEEDED, CallToAction.ADD_REVIEWERS)
+
         return slack_messages
 
     if new_assignees:
@@ -353,25 +376,43 @@ def _generate_slack_messages_for_new_status_or_comment(
     return slack_messages
 
 
-def _get_ci_status(statuses):
-    """Return the continous integration status of the pull request.
+def _get_dicts_before(dicts, reference_dict):
+    if not reference_dict:
+        return dicts
+    dicts_before = [
+        a_dict for a_dict in dicts
+        if a_dict['updated_at'] <= reference_dict['updated_at']
+    ]
+    return dicts_before
 
-    Return None when the statuses did not give any info about the respective status.
+
+def _get_ci_states(ci_status_events):
+    """Return the current state, previous state (that not 'pending') and ci_url of the pull request.
+
+    Return None if none found.
     """
     # Check the format of statuses here: https://developer.github.com/v3/repos/statuses/
-    # TODO(add more doc abou the different event formats)
-    statuses = sorted(statuses, key=lambda status: status['context'])
-    statuses_by_context = itertools.groupby(statuses, key=lambda status: status['context'])
-    ci_status = None
+    # TODO(add more doc about the different event formats)
+    ci_status_events = sorted(ci_status_events, key=lambda event: event['context'])
+    events_by_context = itertools.groupby(ci_status_events, key=lambda event: event['context'])
+    ci_state = None
     ci_url = None
-    for context, context_statuses in statuses_by_context:
-        if context.startswith('ci/'):
-            last_status = max(context_statuses, key=lambda status: status['updated_at'])
-            # TODO(florian): improve to work with multiple CI.
-            ci_status = last_status['state']
-            ci_url = last_status['target_url']
+    previous_not_pending_ci_state = None
+    for context, context_events in events_by_context:
+        # TODO(florian): improve to work with multiple CI.
+        if not context.startswith('ci/'):
             continue
-    return ci_status, ci_url
+        orderered_events = sorted(context_events, key=lambda event: event['updated_at'])
+        ci_status_event = orderered_events[-1]
+        ci_url = ci_status_event['target_url']
+        ci_state = ci_status_event['state']
+        previous_events = orderered_events[:-1]
+        previous_not_pending_events = [
+            event for event in previous_events
+            if event['state'] != 'pending']
+        if previous_not_pending_events:
+            previous_not_pending_ci_state = previous_not_pending_events[-1]['state']
+    return ci_state, ci_url, previous_not_pending_ci_state
 
 
 def _get_lgtm_givers(comments):
