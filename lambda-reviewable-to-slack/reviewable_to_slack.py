@@ -118,7 +118,7 @@ _GITHUB_PERSONAL_ACCESS_TOKEN = os.getenv('GITHUB_PERSONAL_ACCESS_TOKEN', '')
 # TODO(pascal for florian): Please document all the regexp here, I'm a bit worried that this stops
 # working if any other tool (reviewable or our own CI) change its syntax. Also document what kind
 # of text they are capture if it's not obvious (like the github link regex)
-_REVIEWABLE_ASSIGN_REGEX = re.compile(r'\+@([\w]+)\b', re.MULTILINE)
+_REVIEWABLE_ASSIGN_REGEX = re.compile(r'\+@([\w-]+)\b', re.MULTILINE)
 _REVIEWABLE_LGTM_REGEX = re.compile(r'<img class="emoji" title=":lgtm')
 _REVIEWABLE_HTML_EMOJI_REGEX = re.compile(r'<img class="emoji" title="([^"]+)"[^>]*>')
 _REVIEWABLE_COMMENT_SEPARATOR = '\n\n---\n\n'

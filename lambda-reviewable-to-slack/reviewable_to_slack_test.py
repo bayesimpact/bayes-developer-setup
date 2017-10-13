@@ -10,7 +10,8 @@ _ERROR_SLACK_CHANNEL = '#general'
 _GITHUB_TO_SLACK_LOGIN = {
     'guillaume_chaslot_reviewee': 'guillaume',
     'pascal_corpet_reviewer_1': 'pascal',
-    'john_metois_reviewer_2': 'john',
+    # Test also names with dashes.
+    'john-metois-reviewer-2': 'john',
 }
 _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL = ''
 _SLACK_APP_BOT_TOKEN = 'xoxb-253193681994-onkkBrKsdXxcNCyeXygMMBjc'
@@ -327,8 +328,8 @@ class ReviewableToSlackTestCase(unittest.TestCase):
 
         slack_messages = self._generate_slack_messages_for_new_comment(
             'guillaume_chaslot_reviewee',
-            '+@john_metois_reviewer_2 \n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5670#-:-KusZEAfCXr76VdJBPDn:bv2wshd)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
-            ['john_metois_reviewer_2']
+            '+@john-metois-reviewer-2 \n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5670#-:-KusZEAfCXr76VdJBPDn:bv2wshd)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
+            ['john-metois-reviewer-2']
         )
         self.assertEqual({}, slack_messages, 'No message expected before CI is done')
 
@@ -356,7 +357,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
         }, slack_messages)
 
         slack_messages = self._generate_slack_messages_for_new_comment(
-            'john_metois_reviewer_2',
+            'john-metois-reviewer-2',
             '<img class="emoji" title=":lgtm_strong:" alt=":lgtm:" align="absmiddle" src="https://reviewable.io/lgtm_strong.png" height="20" width="61"/>\n\n---\n\nReview status: 0 of 3 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5793#-:-Kw5Z15u5QTh2NU8A0MJ:bnfp4nl)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
         )
         self.assertEqual({
@@ -377,13 +378,13 @@ class ReviewableToSlackTestCase(unittest.TestCase):
 
         slack_messages = self._generate_slack_messages_for_new_comment(
             'guillaume_chaslot_reviewee',
-            '+@pascal_corpet_reviewer_1 \n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5670#-:-KusZEAfCXr76VdJBPDn:bv2wshd)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
-            ['pascal_corpet_reviewer_1']
+            '+@john-metois-reviewer-2 \n\n---\n\nReview status: 0 of 2 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5670#-:-KusZEAfCXr76VdJBPDn:bv2wshd)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
+            ['john-metois-reviewer-2']
         )
         self.assertEqual({
-            '@pascal':
+            '@john':
                 '_@guillaume needs your help to review their change ' + _CHANGE + ':_\n'
-                '+@pascal_corpet_reviewer_1 \n' +
+                '+@john-metois-reviewer-2 \n' +
                 "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|" +
                 'check this code>!'
         }, slack_messages)
