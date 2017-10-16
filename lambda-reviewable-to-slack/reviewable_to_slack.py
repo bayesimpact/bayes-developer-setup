@@ -124,6 +124,7 @@ _REVIEWABLE_HTML_EMOJI_REGEX = re.compile(r'<img class="emoji" title="([^"]+)"[^
 _REVIEWABLE_COMMENT_SEPARATOR = '\n\n---\n\n'
 _START_OF_REVIEWABLE_COMMENT_WITHOUT_SEPARATOR_REGEX = r'^\n\n\n\nReview status:'
 _START_OF_REVIEWABLE_COMMENT_WITH_SEPARATOR_REGEX = r'\n\n---\n\nReview status:'
+_REVIEWABLE_UNADDRESSED_COMMENT_REGEX = re.compile(r' (\d)+ unresolved discussion')
 
 
 class ReviewableEvent(enum.Enum):
@@ -165,7 +166,8 @@ _CALL_TO_ACTION_TEMPLATES = {
     CallToAction.CHECK_FEEDBACK: "Let's <{code_review_url}|check their feedback>!",
     CallToAction.CHECK_CHANGE: "Let's <{code_review_url}|check what they have changed>!",
     CallToAction.CHECK_CI: "Let's <{ci_url}|check what the problem is>.",
-    CallToAction.ADDRESS_COMMENTS: "Let's <{code_review_url}|address the remaining comments>.",
+    CallToAction.ADDRESS_COMMENTS:
+        'But you still have <{code_review_url}|{unaddressed_comments_string} to address>.',
     CallToAction.ADD_REVIEWERS: "Let's <{code_review_url}|add reviewers>!",
     CallToAction.WAIT_FOR_REVIEWERS: 'The reviewers have now been asked to review.',
     CallToAction.WAIT_FOR_OTHER_REVIEWERS: 'You now need to wait for the other reviewers.',
@@ -283,12 +285,10 @@ def _generate_slack_messages_for_new_status_or_comment(
     # We don't count LGTM from user that were not assignees.
     remaining_assignees = assignees - lgtm_givers
 
-    last_comment = comments[-1] if comments else None
-    unaddressed_comment_count = _get_unaddressed_comment_count(last_comment) if last_comment else 0
-    has_unaddressed_comments = bool(unaddressed_comment_count)
+    unaddressed_comment_count = _get_unaddressed_comment_count(comments)
     can_submit = (
         assignees and not remaining_assignees and
-        not has_unaddressed_comments and ci_state == 'success')
+        not unaddressed_comment_count and ci_state == 'success')
 
     if new_commentor:
         from_user = new_commentor
@@ -307,7 +307,8 @@ def _generate_slack_messages_for_new_status_or_comment(
             call_to_action=call_to_action,
             pull_request=pull_request,
             ci_url=ci_url,
-            new_comment=new_comment))
+            new_comment=new_comment,
+            unaddressed_comment_count=unaddressed_comment_count))
 
     # Here is all the logic tree about what message to send to whom.
     if not ci_state or ci_state == 'pending':
@@ -331,7 +332,7 @@ def _generate_slack_messages_for_new_status_or_comment(
             CallToAction.SUBMIT if can_submit else
             CallToAction.WAIT_FOR_REVIEWERS if remaining_assignees else
             CallToAction.ADD_REVIEWERS if not assignees else
-            # The logic brings us here is has_unaddressed_comments is true
+            # The logic brings us here is unaddressed_comment_count is not zero.
             CallToAction.ADDRESS_COMMENTS)
         if (event == ReviewableEvent.CI_SUCCEEDED and
                 call_to_action == CallToAction.WAIT_FOR_REVIEWERS):
@@ -354,14 +355,13 @@ def _generate_slack_messages_for_new_status_or_comment(
             # The reviewer gave an LGTM.
             if can_submit:
                 add_slack_message(reviewee, ReviewableEvent.APPROVED, CallToAction.SUBMIT)
-            elif has_unaddressed_comments:
+            elif unaddressed_comment_count:
                 # But there are still comments to address.
-                add_slack_message(reviewee, ReviewableEvent.APPROVED,
-                                  CallToAction.ADDRESS_COMMENTS)
+                add_slack_message(reviewee, ReviewableEvent.APPROVED, CallToAction.ADDRESS_COMMENTS)
             else:
                 # But there are still other reviewers to wait for.
-                add_slack_message(reviewee, ReviewableEvent.APPROVED,
-                                  CallToAction.WAIT_FOR_OTHER_REVIEWERS)
+                add_slack_message(
+                    reviewee, ReviewableEvent.APPROVED, CallToAction.WAIT_FOR_OTHER_REVIEWERS)
         elif new_comment:
             # The reviewer gave some comments.
             add_slack_message(reviewee, ReviewableEvent.COMMENTED, CallToAction.CHECK_FEEDBACK)
@@ -377,7 +377,7 @@ def _generate_slack_messages_for_new_status_or_comment(
         else:
             # The assignee had not contributed to the review yet, so it's time to do it.
             add_slack_message(assignee, ReviewableEvent.COMMENTED, CallToAction.REVIEW)
-    if has_unaddressed_comments:
+    if unaddressed_comment_count:
             # But there are still some comments they should address.
         add_slack_message(reviewee, ReviewableEvent.COMMENTED,
                           CallToAction.ADDRESS_COMMENTS)
@@ -434,7 +434,8 @@ def _get_lgtm_givers(comments):
 
 
 def _generate_slack_message(
-        from_user, event, to_user, call_to_action, pull_request, ci_url, new_comment):
+        from_user, event, to_user, call_to_action, pull_request,
+        ci_url, new_comment, unaddressed_comment_count):
     slack_login = _get_slack_login(to_user)
     if slack_login in _DISABLED_SLACK_LOGINS:
         return {}
@@ -446,7 +447,7 @@ def _generate_slack_message(
         from_user, event, to_user, pull_request, code_review_url)
     comment_recap = _generate_comment_recap(new_comment) if new_comment else ''
     call_to_action_string = _generate_call_to_action_slack_string(
-        call_to_action, code_review_url, ci_url)
+        call_to_action, code_review_url, ci_url, unaddressed_comment_count)
     slack_message = '_{}:_\n{}{}'.format(event_slack_string, comment_recap, call_to_action_string)
     return {slack_channel: slack_message}
 
@@ -481,15 +482,20 @@ def _generate_event_slack_string(
     return event_slack_string
 
 
-def _generate_call_to_action_slack_string(call_to_action, code_review_url, ci_url):
+def _generate_call_to_action_slack_string(
+        call_to_action, code_review_url, ci_url, unaddressed_comment_count):
+    unaddressed_comments_string = '{} comment{}'.format(
+        unaddressed_comment_count, '' if unaddressed_comment_count == 1 else 's')
     call_to_action_slack_string = _CALL_TO_ACTION_TEMPLATES[call_to_action].format(
-        code_review_url=code_review_url, ci_url=ci_url)
+        code_review_url=code_review_url, ci_url=ci_url,
+        unaddressed_comments_string=unaddressed_comments_string)
     return call_to_action_slack_string
 
 
 def _generate_comment_recap(new_comment):
     comment_recap = ''
-    main_comment, inline_comment_count = _get_comment_parts(new_comment['body'])
+    main_comment, inline_comment_count, unused_unaddressed_comment_count =\
+        _get_comment_parts(new_comment['body'])
     if inline_comment_count:
         inline_comment_count_sentence = '{} inline comment{}'.format(
             inline_comment_count, '' if inline_comment_count == 1 else 's')
@@ -512,11 +518,15 @@ def _get_comment_parts(comment_body):
     if len(comment_parts) == 1:
         # This is a comment written directly from Github, it doesn't have the parts of Reviewable.
         inline_comment_count = 0
+        # TODO(florian): figure out the real unaddressed_comment_count in this case.
+        unaddressed_comment_count = 0
     else:
-        unused_review_status = comment_parts[1]
+        review_status = comment_parts[1]
+        match = _REVIEWABLE_UNADDRESSED_COMMENT_REGEX.search(review_status)
+        unaddressed_comment_count = int(match[1]) if match else 0
         inline_comments = comment_parts[2:-1]
         inline_comment_count = len(inline_comments)
-    return main_comment, inline_comment_count
+    return main_comment, inline_comment_count, unaddressed_comment_count
 
 
 def _replace_emoji_image_by_emoji_name(html_text):
@@ -538,10 +548,14 @@ def _get_github_api_ressource(ressource_url):
     return response.json()
 
 
-def _get_unaddressed_comment_count(unused_comment):
+def _get_unaddressed_comment_count(comments):
     """Tells how many comments are still to be adressed by the review owner."""
-    # TODO(florian): Get this value from comment.
-    return 0
+    if not comments:
+        return 0
+    last_comment = comments[-1]
+    unused_main_comment, unused_inline_comment_count, unaddressed_comment_count =\
+        _get_comment_parts(last_comment['body'])
+    return unaddressed_comment_count
 
 
 # We only need this for local development.
