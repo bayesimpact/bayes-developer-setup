@@ -280,13 +280,15 @@ def _generate_slack_messages_for_new_status_or_comment(
 
     lgtm_givers = _get_lgtm_givers(comments)
     new_lgtm_givers = _get_lgtm_givers([new_comment] if new_comment else [])
-    # Make sure we don't count LGTM from user that were not assignees.
-    has_assignees_without_lgtm = bool(assignees - lgtm_givers)
+    # We don't count LGTM from user that were not assignees.
+    remaining_assignees = assignees - lgtm_givers
 
     last_comment = comments[-1] if comments else None
     unaddressed_comment_count = _get_unaddressed_comment_count(last_comment) if last_comment else 0
     has_unaddressed_comments = bool(unaddressed_comment_count)
-    can_submit = not has_assignees_without_lgtm and not has_unaddressed_comments
+    can_submit = (
+        assignees and not remaining_assignees and
+        not has_unaddressed_comments and ci_state == 'success')
 
     if new_commentor:
         from_user = new_commentor
@@ -318,18 +320,25 @@ def _generate_slack_messages_for_new_status_or_comment(
         return slack_messages
 
     if new_ci_state == 'success':
-        # The CI is now ready so we should ask the assignees to review it.
-        for assignee in assignees:
+        # The CI is now ready so we should ask the remaining assignees to review it.
+        for assignee in remaining_assignees:
             add_slack_message(assignee, ReviewableEvent.ASSIGNED, CallToAction.REVIEW)
         # If the CI if fixed we should tell the reviewee.
-        if previous_not_pending_ci_state == 'failure':
-            add_slack_message(
-                reviewee, ReviewableEvent.CI_FIXED,
-                CallToAction.WAIT_FOR_REVIEWERS if assignees else CallToAction.ADD_REVIEWERS)
-        # If this is the first time the CI passes, we offer to add reviewers.
-        elif not assignees:
-            add_slack_message(reviewee, ReviewableEvent.CI_SUCCEEDED, CallToAction.ADD_REVIEWERS)
-
+        event = (
+            ReviewableEvent.CI_FIXED if previous_not_pending_ci_state == 'failure' else
+            ReviewableEvent.CI_SUCCEEDED)
+        call_to_action = (
+            CallToAction.SUBMIT if can_submit else
+            CallToAction.WAIT_FOR_REVIEWERS if remaining_assignees else
+            CallToAction.ADD_REVIEWERS if not assignees else
+            # The logic brings us here is has_unaddressed_comments is true
+            CallToAction.ADDRESS_COMMENTS)
+        if (event == ReviewableEvent.CI_SUCCEEDED and
+                call_to_action == CallToAction.WAIT_FOR_REVIEWERS):
+            # Don't tell the reviewee to wait for reviewers the first time the CI succeeded, as this
+            # is the default expected situation.
+            return slack_messages
+        add_slack_message(reviewee, event, call_to_action)
         return slack_messages
 
     if new_assignees:
@@ -359,7 +368,7 @@ def _generate_slack_messages_for_new_status_or_comment(
         return slack_messages
 
     # The pull request owner wrote some feedback.
-    for assignee in assignees:
+    for assignee in remaining_assignees:
         if assignee in commentors:
             # If the assignee had written some comment before, it is likely the pull request
             # owner just responded to them.

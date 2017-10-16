@@ -356,6 +356,18 @@ class ReviewableToSlackTestCase(unittest.TestCase):
                 'You now need to wait for the other reviewers.',
         }, slack_messages)
 
+        # The reviewer sent a new code update, only the reviewer that did not give an LGTM already.
+        slack_messages = self._generate_slack_messages_for_new_ci_status('pending')
+        self.assertEqual({}, slack_messages, 'No message expected before CI is done')
+
+        slack_messages = self._generate_slack_messages_for_new_ci_status('success')
+        self.assertEqual({
+            '@john':
+                '_@guillaume needs your help to review their change ' + _CHANGE + ':_\n'
+                "Let's <https://reviewable.io/reviews/bayesimpact/bob-emploi/5670|" +
+                'check this code>!',
+        }, slack_messages)
+
         slack_messages = self._generate_slack_messages_for_new_comment(
             'john-metois-reviewer-2',
             '<img class="emoji" title=":lgtm_strong:" alt=":lgtm:" align="absmiddle" src="https://reviewable.io/lgtm_strong.png" height="20" width="61"/>\n\n---\n\nReview status: 0 of 3 files reviewed at latest revision, all discussions resolved.\n\n---\n\n\n\n*Comments from [Reviewable](https://reviewable.io:443/reviews/bayesimpact/bob-emploi/5793#-:-Kw5Z15u5QTh2NU8A0MJ:bnfp4nl)*\n<!-- Sent from Reviewable.io -->\n',  # nopep8 # pylint: disable=line-too-long
