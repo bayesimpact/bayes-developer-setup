@@ -1,0 +1,35 @@
+version: 2
+jobs:
+  test:
+    docker:
+      - image: bayesimpact/circleci
+    steps:
+      - checkout
+      - setup_remote_docker:
+          # Allows to use previous cached version of the built Docker services.
+          reusable: true
+      - run:
+          name: Run tests
+          command: |
+            # Compose docker service with volumes (CircleCI 2.0 does not support this natively).
+            ./docker-compose-up-remote-env.sh test
+            docker exec -t test cucumber
+            ./stop-dockers-from-compose-up-remote-env.sh
+            # Run docker services without volumes
+            docker-compose run test-reviewable
+            docker-compose run test-reviewable npm run lint
+
+workflows:
+  version: 2
+  test:
+    jobs:
+      - test:
+          filters:
+            tags:
+              only: /.*/
+
+experimental:
+  notify:
+    branches:
+      only:
+        - master
