@@ -207,14 +207,12 @@ def _get_all_resources_for_issue_comment_event(github_notification):
         # pull request.
         raise NotEnoughDataException('No pull request')
     pull_request_url = issue['pull_request']['url']
-    pull_request = _get_github_api_ressource(pull_request_url)
-    ci_status_events = _get_github_api_ressource(pull_request['statuses_url'])
+    pull_request = _get_github_api_resource(pull_request_url)
+    ci_status_events = _get_github_api_resource(pull_request['statuses_url'])
     new_ci_status_event = None
-    comments = _get_github_api_ressource(pull_request['comments_url'])
-    # Get the version of new_comment from the API instead of from the github notification.
-    new_comment = next(
-        comment for comment in comments
-        if comment['id'] == github_notification['comment']['id'])
+    comments, new_comment = _get_github_api_resources_until_id(
+        pull_request['comments_url'], github_notification['comment']['id'])
+
     return GithubEventParams(
         pull_request=pull_request,
         ci_status_events=ci_status_events,
@@ -237,18 +235,16 @@ def _get_all_resources_for_ci_status_event(github_notification):
         new_ci_status_event['branches'][0]['name'])
     pull_request_url = new_ci_status_event['repository']['pulls_url'].replace(
         '{/number}', filter_for_branch)
-    pull_requests = _get_github_api_ressource(pull_request_url)
+    pull_requests = _get_github_api_resource(pull_request_url)
     if len(pull_requests) != 1:
         raise NotEnoughDataException('Did not find a single pull_request: {}'.format(
             pull_requests))
     pull_request = pull_requests[0]
 
-    ci_status_events = _get_github_api_ressource(pull_request['statuses_url'])
-    # Get the version of new_ci_status_event from the API instead of from the github notification.
-    new_ci_status_event = next(
-        event for event in ci_status_events
-        if event['id'] == new_ci_status_event['id'])
-    comments = _get_github_api_ressource(pull_request['comments_url'])
+    ci_status_events, new_ci_status_event = _get_github_api_resources_until_id(
+        pull_request['statuses_url'], new_ci_status_event['id'])
+
+    comments = _get_github_api_resource(pull_request['comments_url'])
     new_comment = None
     return GithubEventParams(
         pull_request=pull_request,
@@ -533,17 +529,31 @@ def _replace_emoji_image_by_emoji_name(html_text):
     return _REVIEWABLE_HTML_EMOJI_REGEX.sub(r'\1', html_text)
 
 
-def _get_github_api_ressource(ressource_url):
+def _get_github_api_resources_until_id(resources_url, new_resource_id):
+    attempts = 0
+    while attempts < 10:
+        resources = _get_github_api_resource(resources_url)
+        new_resource = next((
+            resource for resource in resources
+            if resource['id'] == new_resource_id), None)
+        if new_resource:
+            return resources, new_resource
+        attempts += 1
+    raise ExecutionException('Could not fetch info about resource id {} from {}'.format(
+        new_resource_id, resources_url))
+
+
+def _get_github_api_resource(resource_url):
     """Calls Github API to retrieve resource state."""
     if not _GITHUB_PERSONAL_ACCESS_TOKEN:
         raise SetupException('Need to define _GITHUB_PERSONAL_ACCESS_TOKEN env variable.')
     auth = tuple(_GITHUB_PERSONAL_ACCESS_TOKEN.split(':'))
     # TODO(florian): Get items on page > 1 if necessary.
-    per_page = ('&' if '?' in ressource_url else '?') + 'per_page=100'
-    response = requests.get(ressource_url + per_page, auth=auth)
+    per_page = ('&' if '?' in resource_url else '?') + 'per_page=100'
+    response = requests.get(resource_url + per_page, auth=auth)
     if response.status_code != 200:
         raise ExecutionException('Could not retrieve object from Github API:\n{}\n{}: {}'.format(
-            ressource_url, response.status_code, response.text
+            resource_url, response.status_code, response.text
         ))
     return response.json()
 
