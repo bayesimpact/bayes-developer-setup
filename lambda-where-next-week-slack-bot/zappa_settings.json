@@ -1,0 +1,16 @@
+{
+  "prod": {
+    "project_name": "where-next-week-slack-bot",
+    "app_function": "where_next_week_slack_bot.app",
+    "lambda_description": "Slack bot to tell in which city team members will be next week.",
+    "runtime": "python3.6",
+    "s3_bucket": "lambda-where-next-week-slack-bot-prod-repo",
+  },
+  "dev": {
+    "extends": "prod",
+    "s3_bucket": "lambda-where-next-week-slack-bot-dev-repo",
+    "aws_environment_variables": {
+      "REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL": "@florian"
+    }
+  }
+}

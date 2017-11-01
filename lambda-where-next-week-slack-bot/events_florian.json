@@ -1,0 +1,182 @@
+{
+ "items": [
+  {
+   "status": "confirmed",
+   "summary": "Florian in Paris",
+   "start": {
+    "dateTime": "2017-11-08T09:00:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-08T18:00:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "Daily Standup",
+   "start": {
+    "dateTime": "2017-11-06T09:30:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-06T09:40:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "Daily Standup",
+   "start": {
+    "dateTime": "2017-11-07T09:30:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-07T09:40:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "Daily Standup",
+   "start": {
+    "dateTime": "2017-11-08T09:30:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-08T09:40:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "Daily Standup",
+   "start": {
+    "dateTime": "2017-11-09T09:30:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-09T09:40:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "Daily Standup",
+   "start": {
+    "dateTime": "2017-11-10T09:30:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-10T09:40:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "Personal Growth Buddy Margaux",
+   "start": {
+    "dateTime": "2017-11-09T14:00:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-09T14:30:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "France TGIF",
+   "description": "Agenda:\n- 5' of Sprint Demo: demo of progress made in the product\n- 20' of PPPP: each teammember goes consicely over the:\n    - Progress made during the week\n    - Problems that are blocking them\n    - Plan to address those problems, and the goal of next week\n    - Personal stuff to share with the team\n- 10' of Discussion about a general topic impacting the team\n- 20' of Sprint retrospective:\n    - Review Good / Bad / Try of the sprint (in Slack run: /retro list) and write in down in a gDoc note\n    - Add action items in the backlog to improve our processes\n\nSetup Hangout On Air:\n- Instructions: go/air\n- Owner 1: Emmanuel",
+   "location": "Hangouts on air",
+   "start": {
+    "dateTime": "2017-11-10T17:00:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-10T18:00:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "Florian in Paris",
+   "start": {
+    "dateTime": "2017-11-07T09:00:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-07T18:00:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "Florian in Paris",
+   "start": {
+    "dateTime": "2017-11-09T09:00:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-09T18:00:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "Blitz",
+   "location": "French offices",
+   "start": {
+    "dateTime": "2017-11-06T17:45:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-06T17:55:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "Blitz",
+   "location": "French offices",
+   "start": {
+    "dateTime": "2017-11-07T17:45:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-07T17:55:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "Blitz",
+   "location": "French offices",
+   "start": {
+    "dateTime": "2017-11-08T17:45:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-08T17:55:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "Blitz",
+   "location": "French offices",
+   "start": {
+    "dateTime": "2017-11-09T17:45:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-09T17:55:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "Florian OOO for The Family",
+   "start": {
+    "dateTime": "2017-11-07T14:30:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-07T18:00:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "AlanXBayes Lunch",
+   "location": "tbd",
+   "start": {
+    "dateTime": "2017-11-07T12:30:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-07T14:30:00+01:00"
+   }
+  },
+  {
+   "status": "confirmed",
+   "summary": "*** Pot de départ Claire ***",
+   "description": "Hello vous, \n\nClaire s'envole vers de nouvelles aventures ( :'( / :D ) et nous allons fêter son départ au LLL le vendredi 10 novembre à 18h30, vous êtes les bienvenus :)\n\nPour ceux qui le souhaitent, nous prolongerons sûrement la soirée ailleurs afin de ne pas embêter les voisins :)",
+   "start": {
+    "dateTime": "2017-11-10T18:30:00+01:00"
+   },
+   "end": {
+    "dateTime": "2017-11-10T20:30:00+01:00"
+   }
+  }
+ ]
+}

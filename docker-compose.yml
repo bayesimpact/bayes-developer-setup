@@ -39,3 +39,36 @@ services:
       AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
       AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION
     tty: true
+  lambda-where-next-week-slack-bot-test:
+    build:
+      context: lambda-where-next-week-slack-bot
+      dockerfile: Dockerfile.test
+    volumes:
+      - ./lambda-where-next-week-slack-bot/lint_and_test.sh:/test/lint_and_test.sh:ro
+      - ./lambda-where-next-week-slack-bot/where_next_week_slack_bot.py:/test/where_next_week_slack_bot.py:ro
+      - ./lambda-where-next-week-slack-bot/where_next_week_slack_bot_test.py:/test/where_next_week_slack_bot_test.py:ro
+      - ./lambda-where-next-week-slack-bot/manual_flask_test:/test/manual_flask_test:ro
+      - ./lambda-where-next-week-slack-bot/client_secret.json:/test/client_secret.json:ro
+      - ./lambda-where-next-week-slack-bot/events_florian.json:/test/events_florian.json:ro
+      - ./lambda-where-next-week-slack-bot/quickstart.py:/test/quickstart.py:ro
+      - ./.pylintrc:/test/.pylintrc:ro
+      - ./.pep8:/test/.pep8:ro
+    environment:
+      ERROR_SLACK_CHANNEL:
+      SLACK_LOGIN_TO_DEFAULT_CITY:
+      REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL:
+      GITHUB_PERSONAL_ACCESS_TOKEN:
+      GITHUB_TO_SLACK_LOGIN:
+    tty: true
+  lambda-where-next-week-slack-bot-deploy:
+    build:
+      context: lambda-where-next-week-slack-bot
+      dockerfile: Dockerfile.deploy
+    volumes:
+      - ./lambda-where-next-week-slack-bot/where_next_week_slack_bot.py:/var/task/where_next_week_slack_bot.py:ro
+      - ./lambda-where-next-week-slack-bot/zappa_settings.json:/var/task/zappa_settings.json:ro
+    environment:
+      AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+      AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+      AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION
+    tty: true
