@@ -10,6 +10,8 @@ import traceback
 import flask
 import requests
 
+import reviewable_comment
+
 # Map from Github users to Slack users.
 _GITHUB_TO_SLACK_LOGIN = json.loads(os.getenv('GITHUB_TO_SLACK_LOGIN', '{}'))
 # Channel to send unexpected error messages to (typically channel of the admin like '@florian').
@@ -56,30 +58,35 @@ def handle_github_notification():
     except Exception as err:  # pylint: disable=broad-except
         slack_messages = {
             _ERROR_SLACK_CHANNEL:
-                'Error: {}\n\n{}\n'.format(err, traceback.format_exc())
+                ('Error: {}\n\n{}\n'.format(err, traceback.format_exc()), [])
         }
         status_code = 500
 
     if slack_messages and _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL:
         # To debug the integration, send only one message with all the info to the channel used
         # to test.
-        all_messages_in_one = 'Messages from Reviewable:\n' + ('\n\n'.join([
-            'To {}:\n{}'.format(slack_channel, slack_message)
-            for slack_channel, slack_message in slack_messages.items()
-        ]) if slack_messages else 'None')
-        slack_messages = {_REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL: all_messages_in_one}
-
-    # Ping on Slack.
-    for slack_channel, slack_message in slack_messages.items():
-        response = requests.post(_SLACK_POST_MESSAGE_ENDPOINT, data={
-            'token': _SLACK_APP_BOT_TOKEN,
-            'channel': slack_channel,
-            'text': slack_message,
-            'as_user': True,
-        })
-        if response.status_code != 200:
-            return 'Error with Slack:\n{} {}'.format(response.status_code, response.text), 500
+        for slack_channel, (slack_message, slack_attachments) in slack_messages.items():
+            _post_message_to_slack(
+                _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL, 'To {}:'.format(slack_channel))
+            _post_message_to_slack(
+                _REDIRECT_ALL_SLACK_MESSAGES_TO_CHANNEL, slack_message, slack_attachments)
+    else:
+        for slack_channel, (slack_message, slack_attachments) in slack_messages.items():
+            _post_message_to_slack(slack_channel, slack_message, slack_attachments)
     return json.dumps(slack_messages), status_code
+
+
+def _post_message_to_slack(slack_channel, slack_message, slack_attachments=None):
+    response = requests.post(_SLACK_POST_MESSAGE_ENDPOINT, data={
+        'token': _SLACK_APP_BOT_TOKEN,
+        'channel': slack_channel,
+        'text': slack_message,
+        'attachments': json.dumps(slack_attachments) if slack_attachments else '',
+        'as_user': True,
+        'link_names': True,
+    })
+    if response.status_code != 200:
+        flask.aboart(message='Error with Slack:\n{} {}'.format(response.status_code, response.text))
 
 
 def _get_missing_env_vars_error_message():
@@ -90,8 +97,8 @@ def _get_missing_env_vars_error_message():
     if not _ERROR_SLACK_CHANNEL:
         error_message += 'Need to set up ERROR_SLACK_CHANNEL as env var in the format: #general'
     if not _SLACK_APP_BOT_TOKEN:
-        error_message += 'Need to set up _SLACK_APP_BOT_TOKEN as env var in the format. Get it ' +\
-            'from https://api.slack.com/apps/A74SCPGAK/oauth'
+        error_message += 'Need to set up SLACK_APP_BOT_TOKEN as env var. Get it from ' +\
+            'https://api.slack.com/apps/A74SCPGAK/oauth'
     return error_message
 
 
@@ -120,11 +127,6 @@ _GITHUB_PERSONAL_ACCESS_TOKEN = os.getenv('GITHUB_PERSONAL_ACCESS_TOKEN', '')
 # of text they are capture if it's not obvious (like the github link regex)
 _REVIEWABLE_ASSIGN_REGEX = re.compile(r'\+@([\w-]+)\b', re.MULTILINE)
 _REVIEWABLE_LGTM_REGEX = re.compile(r'<img class="emoji" title=":lgtm')
-_REVIEWABLE_HTML_EMOJI_REGEX = re.compile(r'<img class="emoji" title="([^"]+)"[^>]*>')
-_REVIEWABLE_COMMENT_SEPARATOR = '\n\n---\n\n'
-_START_OF_REVIEWABLE_COMMENT_WITHOUT_SEPARATOR_REGEX = r'^\n\n\n\nReview status:'
-_START_OF_REVIEWABLE_COMMENT_WITH_SEPARATOR_REGEX = r'\n\n---\n\nReview status:'
-_REVIEWABLE_UNADDRESSED_COMMENT_REGEX = re.compile(r' (\d)+ unresolved discussion')
 
 
 class ReviewableEvent(enum.Enum):
@@ -445,11 +447,14 @@ def _generate_slack_message(
         repository_name, pull_request['number'])
     event_slack_string = _generate_event_slack_string(
         from_user, event, to_user, pull_request, code_review_url)
-    comment_recap = _generate_comment_recap(new_comment) if new_comment else ''
+    slack_comment_attachments = \
+        reviewable_comment.generate_slack_comment_attachments(new_comment) if new_comment else []
     call_to_action_string = _generate_call_to_action_slack_string(
         call_to_action, code_review_url, ci_url, unaddressed_comment_count)
-    slack_message = '_{}:_\n{}{}'.format(event_slack_string, comment_recap, call_to_action_string)
-    return {slack_channel: slack_message}
+    slack_message = '_{}:_'.format(event_slack_string)
+    slack_attachments = slack_comment_attachments + [{
+        'text': call_to_action_string, 'color': '#ffffff'}]
+    return {slack_channel: (slack_message, slack_attachments)}
 
 
 def _get_slack_login(github_login):
@@ -492,47 +497,6 @@ def _generate_call_to_action_slack_string(
     return call_to_action_slack_string
 
 
-def _generate_comment_recap(new_comment):
-    comment_recap = ''
-    main_comment, inline_comment_count, unused_unaddressed_comment_count =\
-        _get_comment_parts(new_comment['body'])
-    if inline_comment_count:
-        inline_comment_count_sentence = '{} inline comment{}'.format(
-            inline_comment_count, '' if inline_comment_count == 1 else 's')
-        comment_recap = main_comment + '\nand ' + inline_comment_count_sentence\
-            if main_comment else inline_comment_count_sentence
-    else:
-        comment_recap = main_comment
-    return comment_recap + '\n'
-
-
-def _get_comment_parts(comment_body):
-    # If there is no main comment the format of the comment is a bit weird at the beginning,
-    # and needs to be normalized to allow us to split the different part more easily.
-    comment_body = re.sub(
-        _START_OF_REVIEWABLE_COMMENT_WITHOUT_SEPARATOR_REGEX,
-        _START_OF_REVIEWABLE_COMMENT_WITH_SEPARATOR_REGEX, comment_body)
-    comment_parts = comment_body.split(_REVIEWABLE_COMMENT_SEPARATOR)
-    # main_comment will be '' if the substitution happened above.
-    main_comment = _replace_emoji_image_by_emoji_name(comment_parts[0])
-    if len(comment_parts) == 1:
-        # This is a comment written directly from Github, it doesn't have the parts of Reviewable.
-        inline_comment_count = 0
-        # TODO(florian): figure out the real unaddressed_comment_count in this case.
-        unaddressed_comment_count = 0
-    else:
-        review_status = comment_parts[1]
-        match = _REVIEWABLE_UNADDRESSED_COMMENT_REGEX.search(review_status)
-        unaddressed_comment_count = int(match[1]) if match else 0
-        inline_comments = comment_parts[2:-1]
-        inline_comment_count = len(inline_comments)
-    return main_comment, inline_comment_count, unaddressed_comment_count
-
-
-def _replace_emoji_image_by_emoji_name(html_text):
-    return _REVIEWABLE_HTML_EMOJI_REGEX.sub(r'\1', html_text)
-
-
 def _get_github_api_ressource(ressource_url):
     """Calls Github API to retrieve resource state."""
     if not _GITHUB_PERSONAL_ACCESS_TOKEN:
@@ -550,12 +514,13 @@ def _get_github_api_ressource(ressource_url):
 
 def _get_unaddressed_comment_count(comments):
     """Tells how many comments are still to be adressed by the review owner."""
-    if not comments:
-        return 0
-    last_comment = comments[-1]
-    unused_main_comment, unused_inline_comment_count, unaddressed_comment_count =\
-        _get_comment_parts(last_comment['body'])
-    return unaddressed_comment_count
+    return 0
+    # if not comments:
+    #     return 0
+    # last_comment = comments[-1]
+    # unused_main_comment, unused_inline_comment_count, unaddressed_comment_count =\
+    #     _get_comment_parts(last_comment['body'])
+    # return unaddressed_comment_count
 
 
 # We only need this for local development.
