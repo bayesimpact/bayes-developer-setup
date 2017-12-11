@@ -64,7 +64,7 @@ if [ -x "${GIT_REVIEW_HOOK}" ]; then
 fi
 
 if [ -z "${FORCE_PUSH}" ]; then
-  hub pull-request -F "${MESSAGE_FILE}" -a "${REVIEWER}" -h "${REMOTE_BRANCH}" | \
+  hub pull-request -F "${MESSAGE_FILE}" -a "${REVIEWER}" -r "${REVIEWER}" -h "${REMOTE_BRANCH}" | \
     sed -e "s/github.com/reviewable.io\/reviews/;s/pull\///"
 fi
 
