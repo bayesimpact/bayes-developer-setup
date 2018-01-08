@@ -171,7 +171,7 @@ if [ -n "${SQUASH_ON_GITHUB}" ]; then
   fi
 
   # Ask GitHub to do the squash and merge!
-  curl -X PUT -H "Authorization: token ${GITHUB_OAUTH_TOKEN}" \
+  curl --fail -X PUT -H "Authorization: token ${GITHUB_OAUTH_TOKEN}" \
     "https://api.github.com/repos/${GITHUB_REPO_USER}/${GITHUB_REPO_NAME}/pulls/${PULL_REQUEST_NUMBER}/merge" \
     --data "{\"merge_method\": \"squash\", \"sha\": \"${BRANCH_INITIAL}\"}" || abort
 
