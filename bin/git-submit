@@ -29,8 +29,8 @@ if [ -z "${BRANCH}" ]; then
   fi
 fi
 
-# Enable specific option if user has the experimental GIT_SUBMIT_EXPERIMENTAL env var set.
-readonly SQUASH_ON_GITHUB="${GIT_SUBMIT_EXPERIMENTAL}"
+# Disable specific option if user has the experimental NO_GIT_SUBMIT_EXPERIMENTAL env var set.
+readonly NO_SQUASH_ON_GITHUB="${NO_GIT_SUBMIT_EXPERIMENTAL}"
 
 # Ensures that current dir is clean.
 if [ -n "$(git diff HEAD --shortstat 2> /dev/null | tail -n1)" ]; then
@@ -96,7 +96,7 @@ while [ "${BASE_MASTER}" != "$(git rev-parse "${BRANCH}^")" ]; do
   fi
   if ( git merge-base --is-ancestor "$(git rev-parse "${BRANCH}^")" "${BASE_MASTER}" ); then
     # There is only one new commit, but it's based on an old version of master.
-    if [[ -z "${SQUASH_ON_GITHUB}" ]] && ! (git rebase "${BASE_BRANCH}" "${BRANCH}"); then
+    if [[ -n "${NO_SQUASH_ON_GITHUB}" ]] && ! (git rebase "${BASE_BRANCH}" "${BRANCH}"); then
       git rebase --abort
       exit 10
     fi
@@ -104,7 +104,7 @@ while [ "${BASE_MASTER}" != "$(git rev-parse "${BRANCH}^")" ]; do
   else
     echo "You should first group all your changes in one commit:" 1>&2
     echo "  git rebase -i ${BASE_BRANCH} ${BRANCH}" 1>&2
-    if [[ -n "${SQUASH_ON_GITHUB}" ]]; then
+    if [[ -z "${NO_SQUASH_ON_GITHUB}" ]]; then
       exit 12
     fi
     read -p "Rebase now? [y/N]" answer
@@ -130,7 +130,7 @@ if [ -z "${BRANCH_REMOTE}" ]; then
   exit 5
 fi
 
-if [ -n "${SQUASH_ON_GITHUB}" ]; then
+if [ -z "${NO_SQUASH_ON_GITHUB}" ]; then
   # Get OAuth Token.
   # We use the hub config located in ~/.config/hub, it's a yaml file with first
   # level keys being the server domains. And then it has a subkey with
