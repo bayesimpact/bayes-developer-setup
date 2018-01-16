@@ -1,5 +1,8 @@
 Feature: git submit
 
+  Background:
+    Given I set the environment variable "NO_GIT_SUBMIT_EXPERIMENTAL" to "1"
+
   Scenario: Successful submission
     Given a dummy git repo in "origin"
     And I am in a "work" git repo cloned from "origin"
