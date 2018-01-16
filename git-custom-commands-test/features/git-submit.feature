@@ -1,5 +1,9 @@
 Feature: git submit
 
+  Background:
+    # TODO(pascal): Also add tests for the default (without this env var).
+    Given I set the environment variable "NO_GIT_SUBMIT_EXPERIMENTAL" to "1"
+
   Scenario: Successful submission
     Given a dummy git repo in "origin"
     And I am in a "work" git repo cloned from "origin"
