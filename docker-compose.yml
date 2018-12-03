@@ -10,6 +10,9 @@ services:
     build:
       context: reviewable
       dockerfile: Dockerfile
+    volumes:
+      - ./reviewable/lgtm_plus_resolved_discussions.js:/usr/src/app/lgtm_plus_resolved_discussions.js:ro
+      - ./reviewable/test:/usr/src/app/test:ro
   lambda-reviewable-to-slack-test:
     build:
       context: lambda-reviewable-to-slack
