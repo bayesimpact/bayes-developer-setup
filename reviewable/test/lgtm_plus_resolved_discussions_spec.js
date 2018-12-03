@@ -74,18 +74,19 @@ describe('Approval', function() {
         {
           username: 'testbayes',
           resolved: false,
-          disposition: 'discussing',
+          disposition: 'blocking',
         },
         {
           username: 'dedan',
           resolved: false,
-          disposition: 'discussing',
+          disposition: 'following',
         },
       ],
     })
     let res = funcToTest(_, review)
     expect(res.debug.allDiscussionsResolved).to.equal(false)
     review.discussions[0].participants[1].resolved = true
+    review.discussions[0].participants[1].disposition = 'satisfied'
     res = funcToTest(_, review)
     expect(res.debug.allDiscussionsResolved).to.equal(true)
   })
