@@ -23,9 +23,13 @@ _.each(review.sentiments, function(sentiment) {
   }
 })
 
-const reviewers = _.union(
-  _.pluck(review.pullRequest.requestedReviewers, 'username'),
-  _.pluck(review.pullRequest.assignees, 'username'))
+const author = review.pullRequest.author.username
+
+const reviewers = _.without(
+  _.union(
+    _.pluck(review.pullRequest.requestedReviewers, 'username'),
+    _.pluck(review.pullRequest.assignees, 'username')
+  ), author)
 const atLeastOneLgtm = !!_.intersection(approvals, reviewers).length
 if (!reviewers.length) {
   descriptions.push('Missing an assignee or a reviewer')
@@ -46,7 +50,6 @@ const isSatisfied = (who, {participants}) =>
 
 
 // Discussion resolved approval.
-const author = review.pullRequest.author.username
 const discussionsBlockedByAuthor = review.discussions.
   filter(discussion => isAnyoneBlocking(discussion) && !isSatisfied(author, discussion))
 const allDiscussionsResolved = !discussionsBlockedByAuthor.length
