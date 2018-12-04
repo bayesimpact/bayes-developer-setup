@@ -51,7 +51,9 @@ const discussionsBlockedByAuthor = review.discussions.
   filter(discussion => isAnyoneBlocking(discussion) && !isSatisfied(author, discussion))
 const allDiscussionsResolved = !discussionsBlockedByAuthor.length
 if (!allDiscussionsResolved) {
-  descriptions.push('Unresolved discussions')
+  const {target: {file, line, revision} = {}} = discussionsBlockedByAuthor[0]
+  const example = file ? ` (${file}:${revision} line ${line})` : ''
+  descriptions.push(`Unresolved discussions${example}`)
 }
 
 

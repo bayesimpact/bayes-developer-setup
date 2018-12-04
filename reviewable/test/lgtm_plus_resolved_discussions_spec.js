@@ -23,14 +23,15 @@ const template = {
   discussions: [],
 }
 
-describe('Approval via LGTM', function() {
+describe('Approval via LGTM', () => {
   let review
 
-  beforeEach(function() {
-    review = Object.assign({}, template)
+  beforeEach(() => {
+    // Deep copy:
+    review = JSON.parse(JSON.stringify(template))
   })
 
-  it('should not be complete without LGTM of one assignee', function() {
+  it('should not be complete without LGTM of one assignee', () => {
     review.pullRequest.assignees.push({username: 'pcorpet'})
     let res = funcToTest(_, review)
     expect(res.completed).to.equal(false)
@@ -59,14 +60,20 @@ describe('Approval via LGTM', function() {
 })
 
 
-describe('Approval', function() {
+describe('Approval', () => {
   let review
 
-  beforeEach(function() {
-    review = Object.assign({}, template)
+  beforeEach(() => {
+    // Deep copy:
+    review = JSON.parse(JSON.stringify(template))
   })
 
-  it('mark discussions as resolved when the author is resolved', function() {
+  it('marks discussions as unresolved when someone is blocking, even with an LGTM', () => {
+    review.pullRequest.assignees.push({username: 'pcorpet'})
+    review.sentiments.push({
+      username: 'pcorpet',
+      emojis: ['lgtm'],
+    })
     review.discussions.push({
       numMessages: 2,
       resolved: false,
@@ -83,11 +90,70 @@ describe('Approval', function() {
         },
       ],
     })
-    let res = funcToTest(_, review)
+    const res = funcToTest(_, review)
     expect(res.debug.allDiscussionsResolved).to.equal(false)
-    review.discussions[0].participants[1].resolved = true
-    review.discussions[0].participants[1].disposition = 'satisfied'
-    res = funcToTest(_, review)
+    expect(res.completed).to.equal(false)
+    expect(res.description).to.include('Unresolved discussions')
+  })
+
+  it('marks discussions as resolved when the author is satisfied', () => {
+    review.pullRequest.assignees.push({username: 'pcorpet'})
+    review.sentiments.push({
+      username: 'pcorpet',
+      emojis: ['lgtm'],
+    })
+    review.discussions.push({
+      numMessages: 2,
+      resolved: false,
+      participants: [
+        {
+          username: 'testbayes',
+          resolved: false,
+          disposition: 'blocking',
+        },
+        {
+          username: 'dedan',
+          resolved: true,
+          disposition: 'satisfied',
+        },
+      ],
+    })
+    const res = funcToTest(_, review)
     expect(res.debug.allDiscussionsResolved).to.equal(true)
+    expect(res.completed).to.equal(true)
+  })
+
+  it('describes the line with a discussion that is not complete', () => {
+    review.pullRequest.assignees.push({username: 'pcorpet'})
+    review.sentiments.push({
+      username: 'pcorpet',
+      emojis: ['lgtm'],
+    })
+    review.discussions.push({
+      numMessages: 2,
+      resolved: false,
+      participants: [
+        {
+          username: 'testbayes',
+          resolved: false,
+          disposition: 'blocking',
+        },
+        {
+          username: 'dedan',
+          resolved: false,
+          disposition: 'following',
+        },
+      ],
+      target: {
+        file: 'frontend/server/diagnostic.py',
+        line: 88,
+        revision: 'r1',
+      },
+    })
+    const res = funcToTest(_, review)
+    expect(res.debug.allDiscussionsResolved).to.equal(false)
+    expect(res.completed).to.equal(false)
+    expect(res.description).to.include('Unresolved discussions')
+    expect(res.description).to.include('frontend/server/diagnostic.py:r1 line 88')
   })
 })
