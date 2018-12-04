@@ -34,13 +34,21 @@ if (!reviewers.length) {
 }
 
 
+const isAnyoneBlocking = ({participants}) =>
+  !!participants.filter(({disposition}) =>
+    disposition === 'blocking' || disposition === 'working'
+  ).length
+
+
+const isSatisfied = (who, {participants}) =>
+  !!participants.filter(({disposition, username}) =>
+    who === username && disposition === 'satisfied').length
+
+
 // Discussion resolved approval.
 const author = review.pullRequest.author.username
-const discussionsBlockedByAuthor = _.chain(review.discussions).
-  pluck('participants').
-  flatten().
-  where({resolved: false, username: author, disposition: 'discussing'}).
-  value()
+const discussionsBlockedByAuthor = review.discussions.
+  filter(discussion => isAnyoneBlocking(discussion) && !isSatisfied(author, discussion))
 const allDiscussionsResolved = !discussionsBlockedByAuthor.length
 if (!allDiscussionsResolved) {
   descriptions.push('Unresolved discussions')
