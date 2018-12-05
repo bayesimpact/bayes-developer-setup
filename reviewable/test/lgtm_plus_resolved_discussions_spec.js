@@ -97,6 +97,7 @@ describe('Approval', () => {
   })
 
   it('marks discussions as resolved when the author is satisfied', () => {
+    review.pullRequest.author.username = 'dedan'
     review.pullRequest.assignees.push({username: 'pcorpet'})
     review.sentiments.push({
       username: 'pcorpet',
@@ -155,5 +156,34 @@ describe('Approval', () => {
     expect(res.completed).to.equal(false)
     expect(res.description).to.include('Unresolved discussions')
     expect(res.description).to.include('frontend/server/diagnostic.py:r1 line 88')
+  })
+
+  it('is not given when the author is the one who gave themself an LGTM', () => {
+    review.pullRequest.author.username = 'dedan'
+    review.pullRequest.assignees.push({username: 'dedan'})
+    review.sentiments.push({
+      username: 'dedan',
+      emojis: ['lgtm'],
+    })
+    review.discussions.push({
+      numMessages: 2,
+      resolved: false,
+      participants: [
+        {
+          username: 'testbayes',
+          resolved: false,
+          disposition: 'blocking',
+        },
+        {
+          username: 'dedan',
+          resolved: true,
+          disposition: 'satisfied',
+        },
+      ],
+    })
+    const res = funcToTest(_, review)
+    expect(res.completed).to.equal(false)
+    expect(res.debug.allDiscussionsResolved).to.equal(true)
+    expect(res.debug.atLeastOneLgtm).to.equal(false)
   })
 })
