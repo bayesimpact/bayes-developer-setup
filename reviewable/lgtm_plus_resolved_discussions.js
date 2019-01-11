@@ -28,7 +28,9 @@ const author = review.pullRequest.author.username
 const reviewers = _.without(
   _.union(
     _.pluck(review.pullRequest.requestedReviewers, 'username'),
-    _.pluck(review.pullRequest.assignees, 'username')
+    _.pluck(review.pullRequest.assignees, 'username'),
+    Object.keys(review.pullRequest.approvals || {}).
+      filter(u => review.pullRequest.approvals[u] === 'approved')
   ), author)
 const atLeastOneLgtm = !!_.intersection(approvals, reviewers).length
 if (!reviewers.length) {
