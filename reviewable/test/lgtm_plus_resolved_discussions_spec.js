@@ -31,6 +31,37 @@ describe('Approval via LGTM', () => {
     review = JSON.parse(JSON.stringify(template))
   })
 
+  it('should be complete with LGTM of one approver', () => {
+    // No assignees.
+    review.pullRequest.assignees.length = 0
+
+    review.pullRequest.approvals = {pcorpet: 'approved'}
+
+    let res = funcToTest(_, review)
+    expect(res.completed).to.equal(false)
+
+    review.sentiments.push({
+      username: 'dedan',
+      emojis: ['blablabla'],
+    })
+    res = funcToTest(_, review)
+    expect(res.completed).to.equal(false)
+
+    review.sentiments.push({
+      username: 'pcorpet',
+      emojis: ['blablabla'],
+    })
+    res = funcToTest(_, review)
+    expect(res.completed).to.equal(false)
+
+    review.sentiments.push({
+      username: 'pcorpet',
+      emojis: ['lgtm'],
+    })
+    res = funcToTest(_, review)
+    expect(res.completed).to.equal(true)
+  })
+
   it('should not be complete without LGTM of one assignee', () => {
     review.pullRequest.assignees.push({username: 'pcorpet'})
     let res = funcToTest(_, review)
