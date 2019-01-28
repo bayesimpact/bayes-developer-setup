@@ -2,9 +2,12 @@
 #
 # bash completion support for git-submit
 #
-# Copy this file in /etc/bash_completion.d/git-submit
+# (LINUX) Copy this file in /usr/share/bash-completion/completions/git-submit
+# (MacOs) Copy this file in $(brew --prefix)/etc/bash_completion.d/git-submit
 
 _git_submit()
 {
   __gitcomp "$(__git_heads)"
 }
+
+complete -F _git_submit git-submit
