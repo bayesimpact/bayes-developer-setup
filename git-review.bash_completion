@@ -2,15 +2,22 @@
 #
 # bash completion support for git-review
 #
+# TODO(cyrille): Make this automatic, somehow.
 # (LINUX) Copy this file in /usr/share/bash-completion/completions/git-review
 # (MacOs) Copy this file in $(brew --prefix)/etc/bash_completion.d/git-review
 
 _git_review()
 {
   local cur=${COMP_WORDS[COMP_CWORD]}
-  local reviewers="$(hub api -t repos/{owner}/{repo}/assignees | grep login | cut -f 2)"
-  # TODO(cyrille): Allow multiple reviewers separated by a comma.
-  COMPREPLY=( $(compgen -W "$reviewers" -- $cur) )
+  local last=${cur##*,}
+  local prev=${cur%"$last"}
+  # TODO(cyrille): Add a nice error message when hub returns an error.
+  local reviewers="$(hub api -t repos/{owner}/{repo}/assignees --cache 600 | grep login | cut -f 2)"
+  local remaining_reviewers=$(echo "$reviewers $prev $prev" | tr ', ' "\n" | sort | uniq -u)
+  COMPREPLY=( $(compgen -P "$prev" -W "$remaining_reviewers" -- $last) )
+  if [[ ${#COMPREPLY[@]} == 1 ]] && [[ ${COMPREPLY[0]} == $cur ]] && [[ ${#remaining_reviewers} > 0 ]]; then
+    COMPREPLY=("$cur,")
+  fi
 }
 
 complete -F _git_review git-review
