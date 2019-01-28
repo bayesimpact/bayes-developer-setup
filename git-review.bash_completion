@@ -8,9 +8,11 @@
 _git_review()
 {
   local cur=${COMP_WORDS[COMP_CWORD]}
+  local last=${cur##*,}
+  local prev=${cur%"$last"}
+  # TODO(cyrille): Add a nice error message when hub returns an error.
   local reviewers="$(hub api -t repos/{owner}/{repo}/assignees | grep login | cut -f 2)"
-  # TODO(cyrille): Allow multiple reviewers separated by a comma.
-  COMPREPLY=( $(compgen -W "$reviewers" -- $cur) )
+  COMPREPLY=( $prev$(compgen -W "$reviewers" -- $last) )
 }
 
 complete -F _git_review git-review
