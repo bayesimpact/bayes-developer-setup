@@ -1,0 +1,13 @@
+#!bash
+#
+# bash completion support for git-review
+#
+# Copy this file in /usr/share/bash-completion/completions/git-review
+
+_git_review()
+{
+  local cur=${COMP_WORDS[COMP_CWORD]}
+  local reviewers="$(hub api -t repos/{owner}/{repo}/assignees | grep login | cut -f 2)"
+  COMPREPLY=( $(compgen -W "$reviewers" -- $cur) )
+}
+
