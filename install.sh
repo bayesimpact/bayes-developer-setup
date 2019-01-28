@@ -71,7 +71,7 @@ add_to_shellrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" !=
 
 
 # Install hub.
-HUB_VERSION="2.3.0-pre10"
+HUB_VERSION="2.8.3"
 if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.* //")" != "${HUB_VERSION}" ]; then
 
   if [ "$(uname)" == "Darwin" ]; then
