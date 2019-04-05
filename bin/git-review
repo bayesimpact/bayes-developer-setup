@@ -1,7 +1,8 @@
 #!/bin/bash
 readonly REVIEWER=$1
 readonly REMOTE_REPO="origin"
-readonly BASE_BRANCH="${REMOTE_REPO}/master"
+readonly REMOTE_BASE_BRANCH="${2:-master}"
+readonly BASE_BRANCH="${REMOTE_REPO}/$REMOTE_BASE_BRANCH"
 if [ "$1" == "-f" ] || [ "$1" == "--force" ]; then
   readonly FORCE_PUSH="-f"
 fi
