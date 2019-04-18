@@ -65,8 +65,30 @@ if [ -x "${GIT_REVIEW_HOOK}" ]; then
 fi
 
 if [ -z "${FORCE_PUSH}" ]; then
-  hub pull-request -F "${MESSAGE_FILE}" -a "${REVIEWER}" -r "${REVIEWER}" -h "${REMOTE_BRANCH}" | \
-    sed -e "s/github.com/reviewable.io\/reviews/;s/pull\///"
+  readonly REMOTE_URL="$(git config --get remote.$REMOTE_REPO.url)"
+  if [[ $REMOTE_REPO == *"gitlab.com"* ]]; then
+    # GitLab
+
+    # Find Project ID.
+    readonly GITLAB_PROJECT_NAME=${${REMOTE_REPO/.git//}/git@gitlab.com://}
+    readonly GITLAB_PROJECT_ID=$(gitlab project get --id "$GITLAB_PROJECT_NAME")
+    # Find reviewer ID.
+    readonly GITLAB_REVIEWER_ID=$(gitlab user list --username "$REVIEWER" | grep ^id: | sed -e "s/id: //")
+    # Check if tool exists.
+    if ! [ -x $(which gitlab) ]; then
+      echo "gitlab tool is not installed, please install it:" 1>&2
+      echo "  sudo pip install python-gitlab" 1>&2
+      exit 6
+    fi
+    # Create Merge Request.
+    gitlab project-merge-request create --project-id "$GITLAB_PROJECT_ID" \
+      --source-branch "$REMOTE_BRANCH" --target-branch "$REMOTE_BASE_BRANCH" \
+      --assignee-id "$GITLAB_REVIEWER_ID" --title "$(head $MESSAGE_FILE -n 1)"
+  else
+    # GitHub
+    hub pull-request -F "${MESSAGE_FILE}" -a "${REVIEWER}" -r "${REVIEWER}" -h "${REMOTE_BRANCH}" | \
+      sed -e "s/github.com/reviewable.io\/reviews/;s/pull\///"
+  fi
 fi
 
 rm "${MESSAGE_FILE}"
