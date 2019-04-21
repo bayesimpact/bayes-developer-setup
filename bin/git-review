@@ -78,9 +78,9 @@ if [ -z "${FORCE_PUSH}" ]; then
     # Find Project ID.
     GITLAB_PROJECT_NAME=${REMOTE_URL/git@gitlab.com:/}
     GITLAB_PROJECT_NAME=${GITLAB_PROJECT_NAME/.git/}
-    readonly GITLAB_PROJECT_ID=$(gitlab project get --id "$GITLAB_PROJECT_NAME" | grep ^id: | sed -e "s/id: //")
+    readonly GITLAB_PROJECT_ID=$(gitlab project get --id "$GITLAB_PROJECT_NAME" | grep ^id: | cut -d ' ' -f 2)
     # Find reviewer ID.
-    readonly GITLAB_REVIEWER_ID=$(gitlab user list --username "$REVIEWER" | grep ^id: | sed -e "s/id: //")
+    readonly GITLAB_REVIEWER_ID=$(gitlab user list --username "$REVIEWER" | grep ^id: | cut -d ' ' -f 2)
     # Create Merge Request.
     gitlab project-merge-request create --project-id "$GITLAB_PROJECT_ID" \
       --source-branch "$REMOTE_BRANCH" --target-branch "$REMOTE_BASE_BRANCH" \
