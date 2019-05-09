@@ -70,7 +70,7 @@ if [ -z "${FORCE_PUSH}" ]; then
     # GitLab
 
     # Check if tool exists.
-    if ! [ -x $(which gitlab) ]; then
+    if [ -z "$(which gitlab)" ] || ! [ -x $(which gitlab) ]; then
       echo "gitlab tool is not installed, please install it:" 1>&2
       echo "  https://github.com/bayesimpact/bayes-developer-setup/blob/master/gitlab-cli.md" 1>&2
       exit 6
@@ -84,7 +84,7 @@ if [ -z "${FORCE_PUSH}" ]; then
     # Create Merge Request.
     gitlab project-merge-request create --project-id "$GITLAB_PROJECT_ID" \
       --source-branch "$REMOTE_BRANCH" --target-branch "$REMOTE_BASE_BRANCH" \
-      --assignee-id "$GITLAB_REVIEWER_ID" --title "$(head $MESSAGE_FILE -n 1)"
+      --assignee-id "$GITLAB_REVIEWER_ID" --title "$(head -n 1 $MESSAGE_FILE)"
   else
     # GitHub
     hub pull-request -F "${MESSAGE_FILE}" -a "${REVIEWER}" -r "${REVIEWER}" -h "${REMOTE_BRANCH}" | \
