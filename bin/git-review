@@ -1,10 +1,36 @@
 #!/bin/bash
+
+# Parse the command line arguments.
+POSITIONAL=()
+while [[ $# -gt 0 ]]
+do
+key="$1"
+
+case $key in
+    -f|--force)
+    readonly FORCE_PUSH="$1"
+    shift # past argument
+    ;;
+    -u|--user)
+    readonly USERNAME="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    *)
+    POSITIONAL+=("$1") # save it in an array for later
+    shift # past argument
+    ;;
+esac
+done
+set -- "${POSITIONAL[@]}" # restore positional parameters
+
+
 readonly REVIEWER=$1
 readonly REMOTE_REPO="origin"
 readonly REMOTE_BASE_BRANCH="${2:-master}"
 readonly BASE_BRANCH="${REMOTE_REPO}/$REMOTE_BASE_BRANCH"
-if [ "$1" == "-f" ] || [ "$1" == "--force" ]; then
-  readonly FORCE_PUSH="-f"
+if [ -z "$USERNAME" ]; then
+    readonly USERNAME=$(git config user.email | sed -e "s/@.*$//")
 fi
 
 readonly BRANCH="$(git rev-parse --abbrev-ref HEAD)"
@@ -35,7 +61,6 @@ function cleanup_branch_name {
   sed -e "s/#//g" <<< "$1" | iconv -f utf8 -t ascii//TRANSLIT
 }
 
-readonly USERNAME=$(git config user.email | sed -e "s/@.*$//")
 readonly EXISTING_REMOTE_BRANCH=$(git config "branch.${BRANCH}.merge" | sed -e "s/refs.heads.//")
 if [ -n "${EXISTING_REMOTE_BRANCH}" ]  && [ "${EXISTING_REMOTE_BRANCH}" != "master" ]; then
   readonly REMOTE_BRANCH="${EXISTING_REMOTE_BRANCH}"
