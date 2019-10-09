@@ -1,0 +1,13 @@
+#!/bin/bash
+
+onto="master"
+if [[ "$1" == "--onto" ]]; then
+    onto="$2"
+    shift
+    shift
+fi
+branch=$(git rev-parse --abbrev-ref HEAD)
+if [ -n "$1" ]; then
+    branch="$1"
+fi
+git rebase --onto "$onto" "$branch^" "$branch"
