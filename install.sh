@@ -37,16 +37,42 @@ fi
 echo "Pulling latest version from GitHub."
 git pull origin master 2> /dev/null > /dev/null
 
-# Check if already in crontab.
-readonly TMP_CRON=$(mktemp)
-crontab -l 2> /dev/null > "${TMP_CRON}"
-grep -F "${DIR}/install.sh" "${TMP_CRON}" > /dev/null
-if [ $? -ne 0 ]; then
-  echo 'Adding this script in crontab for auto-update.'
-  echo "@weekly ${SHELL} ${DIR}/install.sh" >> "${TMP_CRON}"
-  crontab "${TMP_CRON}"
+# Rerun this script every week to make sure it keeps everything up-to-date.
+if [ -n "$(which anacron)" ] && [ -x "$(which anacron)" ]; then
+  # Check if already in anacron.
+  grep -F "${DIR}/install.sh" /etc/anacrontab > /dev/null
+  if [ $? -ne 0 ]; then
+    # Drop cron job, if it exists.
+    crontab -l | grep -qF "${DIR}/install.sh" &&
+      contab -l | grep -vF "${DIR}/install.sh" | sudo crontab -u $(whoami) -
+    echo 'Adding this script in anacrontab for auto-update.'
+    echo "7    15    org.bayes.setup.install    ${SHELL} ${DIR}/install.sh" >> /etc/anacrontab
+  fi
+elif [ -n "$(which launchctl)" ] && [ -x "$(which launchctl)" ]; then
+  # Check if already in launchd.
+  launchctl list | grep -F "org.bayes.setup.install" 2> /dev/null
+  if [ $? -ne 0 ]; then
+    # Drop cron job, if it exists.
+    crontab -l | grep -qF "${DIR}/install.sh" &&
+      contab -l | grep -vF "${DIR}/install.sh" | sudo crontab -u $(whoami) -
+    echo 'Adding this script in launchd for auto-update.'
+    mkdir -p "$DIR/logs"
+    sed "s~{{DIR}}~$DIR~" org.bayes.setup.install.plist |
+      sed "s~{{SHELL}}~$SHELL~" > ${HOME}/Library/LaunchAgents/org.bayes.setup.install.plist
+    launchctl load ${HOME}/Library/LaunchAgents/org.bayes.setup.install.plist
+  fi
+elif [ -n "$(which crontab)" ] && [ -x "$(which crontab)" ]; then
+  # Check if already in crontab.
+  readonly TMP_CRON=$(mktemp)
+  crontab -l 2> /dev/null > "${TMP_CRON}"
+  grep -F "${DIR}/install.sh" "${TMP_CRON}" > /dev/null
+  if [ $? -ne 0 ]; then
+    echo 'Adding this script in crontab for auto-update.'
+    echo "@weekly ${SHELL} ${DIR}/install.sh" >> "${TMP_CRON}"
+    crontab "${TMP_CRON}"
+  fi
+  rm "${TMP_CRON}"
 fi
-rm "${TMP_CRON}"
 
 readonly SHELLRC="${HOME}/.${SHELL#/bin/}rc"
 function add_to_shellrc {
