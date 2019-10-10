@@ -40,7 +40,7 @@ git pull origin master 2> /dev/null > /dev/null
 # Rerun this script every week to make sure it keeps everything up-to-date.
 if [ -x "$(which anacron)" ]; then
   # Check if already in anacron.
-  grep -F "${DIR}/install.sh" /etc/anacrontab > /dev/null
+  grep -qF "${DIR}/install.sh" /etc/anacrontab 2> /dev/null
   if [ $? -ne 0 ]; then
     if [ -x "$(which crontab)" ]; then
       # Drop cron job, if it exists.
@@ -52,11 +52,11 @@ if [ -x "$(which anacron)" ]; then
   fi
 elif [ -x "$(which launchctl)" ]; then
   # Check if already in launchd.
-  launchctl list | grep -F "org.bayes.setup.install" 2> /dev/null
+  launchctl list | grep -qF "org.bayes.setup.install" 2> /dev/null
   if [ $? -ne 0 ]; then
     if [ -x "$(which crontab)" ]; then
       # Drop cron job, if it exists.
-      crontab -l | grep -qF "${DIR}/install.sh" &&
+      crontab -l | grep -qF "${DIR}/install.sh" 2> /dev/null &&
         crontab -l | grep -vF "${DIR}/install.sh" | crontab -
     fi
     echo 'Adding this script in launchd for auto-update.'
@@ -69,7 +69,7 @@ elif [ -x "$(which crontab)" ]; then
   # Check if already in crontab.
   readonly TMP_CRON=$(mktemp)
   crontab -l 2> /dev/null > "${TMP_CRON}"
-  grep -F "${DIR}/install.sh" "${TMP_CRON}" > /dev/null
+  grep -qF "${DIR}/install.sh" "${TMP_CRON}" &2 /dev/null
   if [ $? -ne 0 ]; then
     echo 'Adding this script in crontab for auto-update.'
     echo "@weekly ${SHELL} ${DIR}/install.sh" >> "${TMP_CRON}"
