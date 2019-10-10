@@ -99,6 +99,18 @@ export PATH="$PATH:$DIR/bin"
 # Install manuals.
 add_to_shellrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" != *\":$DIR/man:\"* ]]; then export MANPATH=\"\$MANPATH:$DIR/man\"; fi"
 
+# Install autocompletions.
+if [ "$(uname)" == "Darwin" ] && [ -n "$(which brew)" ] && [ -x "$(which brew)" ] && (brew list | grep -q bash-completion); then
+  AUTOCOMPLETE_PATH="$(brew --prefix)/etc/bash_completion.d"
+elif [ "$(uname)" == "Linux" ]; then
+  AUTOCOMPLETE_PATH="/usr/share/bash-completion/completions/"
+fi
+if [ -d "$AUTOCOMPLETE_PATH" ]; then
+  # TODO(cyrille): Put the completion scripts in a subfolder.
+  for completion_file in $(ls *.bash_completion); do
+    ln -s $DIR/${completion_file%".bash_completion"} "$AUTOCOMPLETE_PATH" 2> /dev/null
+  done
+fi
 
 # Install hub.
 HUB_VERSION="2.8.3"
