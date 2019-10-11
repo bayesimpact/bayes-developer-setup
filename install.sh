@@ -21,21 +21,12 @@ if [ -z "${HOME}" ]; then
 fi
 
 readonly DIR="${HOME}/.${NAME}"
+rm -rf "$DIR"
 echo "Creating ${DIR}"
 mkdir -p "${DIR}"
-cd "${DIR}"
-
-# Check if initial install was ever done.
-git rev-parse 2> /dev/null
-if [ $? -ne 0 ]; then
-  echo 'First install, connecting to git.'
-  git init
-  git remote add origin https://github.com/bayesimpact/bayes-developer-setup.git
-fi
-
-# Refresh repo.
 echo "Pulling latest version from GitHub."
-git pull origin master 2> /dev/null > /dev/null
+git clone https://github.com/bayesimpact/bayes-developer-setup.git "$DIR" --depth 1 -b master
+cd "${DIR}"
 
 # Rerun this script every week to make sure it keeps everything up-to-date.
 if [ -x "$(which anacron)" ]; then
