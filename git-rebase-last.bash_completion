@@ -1,0 +1,15 @@
+#!bash
+#
+# bash completion support for git-rebase-last
+
+_git_rebase_last()
+{
+  local command=${COMP_WORDS[0]}
+  local cur=${COMP_WORDS[COMP_CWORD]}
+  __gitcomp "$(__git_heads)"
+  if [[ "$cur" == "-"* ]]; then
+    COMPREPLY+=("--onto")
+  fi
+}
+
+complete -F _git_rebase_last git-rebase-last
