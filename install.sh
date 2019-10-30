@@ -108,7 +108,7 @@ fi
 if [ -d "$AUTOCOMPLETE_PATH" ]; then
   # TODO(cyrille): Put the completion scripts in a subfolder.
   for completion_file in $(ls *.bash_completion); do
-    ln -s $DIR/${completion_file%".bash_completion"} "$AUTOCOMPLETE_PATH" 2> /dev/null
+    ln -s $DIR/$completion_file "$AUTOCOMPLETE_PATH/${completion_file%".bash_completion"}" 2> /dev/null
   done
 fi
 
