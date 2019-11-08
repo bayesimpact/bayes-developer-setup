@@ -14,8 +14,7 @@ jobs:
             docker exec -t "test-$CIRCLE_BUILD_NUM" cucumber
             stop-dockers-from-compose-up-remote-env
             # Run docker services without volumes.
-            docker-compose run test-reviewable
-            docker-compose run test-reviewable npm run lint
+            docker-compose build --pull test-reviewable
 
 workflows:
   version: 2
