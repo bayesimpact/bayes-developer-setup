@@ -11,6 +11,7 @@ services:
       context: reviewable
       dockerfile: Dockerfile
     volumes:
+      - ./reviewable/.eslintrc.json:/usr/src/app/.eslintrc.json:ro
       - ./reviewable/lgtm_plus_resolved_discussions.js:/usr/src/app/lgtm_plus_resolved_discussions.js:ro
       - ./reviewable/test:/usr/src/app/test:ro
   lambda-reviewable-to-slack-test:
