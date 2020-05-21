@@ -27,8 +27,6 @@ set -- "${POSITIONAL[@]}" # restore positional parameters
 
 readonly REVIEWER=$1
 readonly REMOTE_REPO="origin"
-readonly REMOTE_BASE_BRANCH="${2:-master}"
-readonly BASE_BRANCH="${REMOTE_REPO}/$REMOTE_BASE_BRANCH"
 if [ -z "$USERNAME" ]; then
     readonly USERNAME=$(git config user.email | sed -e "s/@.*$//")
 fi
@@ -49,6 +47,32 @@ if [ -n "$(git diff HEAD --shortstat 2> /dev/null | tail -n1)" ]; then
   echo "Current git status is dirty. Commit, stash or revert your changes before sending for review." 1>&2
   exit 3
 fi
+
+# Finds the best base branch.
+if [ -n "$2" ]; then
+  readonly REMOTE_BASE_BRANCH="$2"
+else
+  for sha1 in $(git rev-list --max-count=5 HEAD); do
+    remote_branches="$(git branch -r --contains $sha1 --list "${REMOTE_REPO}/*")"
+    if [ -n "$remote_branches" ]; then
+      # Found at least one remote branch that contains this commit.
+      break
+    fi
+  done
+  if [ -z "$remote_branches" ]; then
+    # Could not find a remote branch containing any of the 5 last commits :-(
+    readonly REMOTE_BASE_BRANCH=master
+  else
+    if grep "/master\$" <<< "$remote_branches"; then
+      # Just base the PR on master
+      readonly REMOTE_BASE_BRANCH=master
+    else
+      readonly REMOTE_BASE_BRANCH="$(head -n 1 <<< "$remote_branches" | sed -e "s/.*\///")"
+      echo "Found a remote branch to base the PR on: $REMOTE_BASE_BRANCH"
+    fi
+  fi
+fi
+readonly BASE_BRANCH="${REMOTE_REPO}/$REMOTE_BASE_BRANCH"
 
 # Ensures that there are some change to review.
 if [ -z "$(git diff $(git merge-base HEAD "${BASE_BRANCH}") --shortstat 2> /dev/null | tail -n1)" ]; then
@@ -112,7 +136,7 @@ if [ -z "${FORCE_PUSH}" ]; then
       --assignee-id "$GITLAB_REVIEWER_ID" --title "$(head -n 1 $MESSAGE_FILE)"
   else
     # GitHub
-    hub pull-request -F "${MESSAGE_FILE}" -a "${REVIEWER}" -r "${REVIEWER}" -h "${REMOTE_BRANCH}" | \
+    hub pull-request -F "${MESSAGE_FILE}" -a "${REVIEWER}" -r "${REVIEWER}" -h "${REMOTE_BRANCH}" -b "$REMOTE_BASE_BRANCH" | \
       sed -e "s/github.com/reviewable.io\/reviews/;s/pull\///"
   fi
 fi
