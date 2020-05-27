@@ -203,4 +203,6 @@ if [[ "${BRANCH}" == "$(git rev-parse --abbrev-ref HEAD)" ]]; then
   git checkout master
 fi
 git branch -D "${BRANCH}"
-git push ${BRANCH_REMOTE} ":${BRANCH_MERGE}"
+if git show-branch "remotes/$BRANCH_REMOTE/$BRANCH_MERGE" > /dev/null; then
+  git push -d ${BRANCH_REMOTE} "${BRANCH_MERGE}"
+fi
