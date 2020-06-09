@@ -13,13 +13,15 @@
 const descriptions = []
 
 // LGTM approval.
-// TODO: Check for LGTM cancellation.
 // Approval by username
 const approvals = []
-_.each(review.sentiments, function(sentiment) {
+_.each(_.sortBy(review.sentiments, 'timestamp'), function(sentiment) {
   const emojis = _.indexBy(sentiment.emojis)
   if (emojis.lgtm || emojis.lgtm_strong) {
     approvals.push(sentiment.username)
+  }
+  if (emojis.lgtm_cancel) {
+    _.pull(approvals, sentiment.username)
   }
 })
 

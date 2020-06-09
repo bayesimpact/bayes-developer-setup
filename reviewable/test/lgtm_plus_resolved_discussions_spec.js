@@ -88,6 +88,60 @@ describe('Approval via LGTM', () => {
     res = funcToTest(_, review)
     expect(res.completed).to.equal(true)
   })
+
+  it('should not be complete with a cancelled LGTM from an assignee', () => {
+    // No assignees.
+    review.pullRequest.assignees.length = 0
+
+    review.pullRequest.approvals = {pcorpet: 'approved'}
+
+    review.sentiments.push({
+      username: 'pcorpet',
+      emojis: ['lgtm'],
+      timestamp: 1591688875000,
+    })
+    let res = funcToTest(_, review)
+    expect(res.completed).to.equal(true)
+
+    review.sentiments.push({
+      username: 'pcorpet',
+      emojis: ['lgtm_cancel'],
+      timestamp: 1591688876000,
+    })
+    res = funcToTest(_, review)
+    expect(res.completed).to.equal(false)
+  })
+
+  it('should be completable after an LGTM has been cancelled', () => {
+    // No assignees.
+    review.pullRequest.assignees.length = 0
+
+    review.pullRequest.approvals = {pcorpet: 'approved'}
+
+    review.sentiments.push({
+      username: 'pcorpet',
+      emojis: ['lgtm'],
+      timestamp: 1591688875000,
+    })
+    let res = funcToTest(_, review)
+    expect(res.completed).to.equal(true)
+
+    review.sentiments.push({
+      username: 'pcorpet',
+      emojis: ['lgtm_cancel'],
+      timestamp: 1591688876000,
+    })
+    res = funcToTest(_, review)
+    expect(res.completed).to.equal(false)
+
+    review.sentiments.push({
+      username: 'pcorpet',
+      emojis: ['lgtm'],
+      timestamp: 1591688877000,
+    })
+    res = funcToTest(_, review)
+    expect(res.completed).to.equal(true)
+  })
 })
 
 
