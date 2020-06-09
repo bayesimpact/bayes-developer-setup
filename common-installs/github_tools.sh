@@ -42,7 +42,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     change=true
   fi
   curl https://raw.githubusercontent.com/git/git/master/contrib/completion/git-prompt.sh > $DIR/bin/.git-prompt.sh
-  echo 'source $DIR/bin/.git-prompt.sh' >> $SHELLRC
+  echo "source $DIR/bin/.git-prompt.sh" >> $SHELLRC
 fi
 
 # If changes were made, source shell script.
