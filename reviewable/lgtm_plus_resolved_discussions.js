@@ -16,7 +16,7 @@ const descriptions = []
 // Approval by username
 const approvals = []
 _.each(_.sortBy(review.sentiments, 'timestamp'), function(sentiment) {
-  const emojis = _.indexBy(sentiment.emojis)
+  const emojis = _.keyBy(sentiment.emojis)
   if (emojis.lgtm || emojis.lgtm_strong) {
     approvals.push(sentiment.username)
   }
@@ -29,8 +29,8 @@ const author = review.pullRequest.author.username
 
 const reviewers = _.without(
   _.union(
-    _.pluck(review.pullRequest.requestedReviewers, 'username'),
-    _.pluck(review.pullRequest.assignees, 'username'),
+    _.map(review.pullRequest.requestedReviewers, 'username'),
+    _.map(review.pullRequest.assignees, 'username'),
     Object.keys(review.pullRequest.approvals || {}).
       filter(u => review.pullRequest.approvals[u] === 'approved')
   ), author)

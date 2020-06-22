@@ -2,7 +2,7 @@
 /*global describe beforeEach it:true*/
 const expect = require('chai').expect
 const fs = require('fs')
-const _ = require('underscore')
+const _ = require('lodash')
 
 const codeToTest = fs.readFileSync('lgtm_plus_resolved_discussions.js', {encoding: 'utf8'})
 const funcToTest = new Function('_', 'review', codeToTest)
