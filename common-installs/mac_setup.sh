@@ -107,5 +107,13 @@ for package in "${packages[@]}"; do
     if [[ $REPLY =~ ^[Yy]$ ]]; then
       brew install "$package"
     fi
+    if [[ "$package" == "coreutils" ]]; then
+      read -p "Would you like to use GNU utils instead of default macOS ones? " -n 1 -r
+      echo # Add a blank line.
+      if [[ $REPLY =~ ^[Yy]$ ]]; then
+        printf 'if type brew &>/dev/null; then\n  HOMEBREW_PREFIX=$(brew --prefix)\n  # gnubin; gnuman\n  for d in ${HOMEBREW_PREFIX}/opt/*/libexec/gnubin; do export PATH=$d:$PATH; done\n  # I actually like that man grep gives the BSD grep man page\n  for d in ${HOMEBREW_PREFIX}/opt/*/libexec/gnuman; do export MANPATH=$d:$MANPATH; done\n' >> "$HOME/.bash_profile"
+        fi
+      fi
+    fi
   fi
 done
