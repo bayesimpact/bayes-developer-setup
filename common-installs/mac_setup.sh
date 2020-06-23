@@ -114,6 +114,15 @@ for package_with_desc in "${packages[@]}"; do
     continue
   fi
   brew install "$package"
+  if [[ "$package" == "coreutils" ]]; then
+    read -p "Would you like to use GNU utils instead of default macOS ones?
+    This will allow several Bayes scripts to work,
+    but may disrupt how you've been using e.g. grep, find, ... " -n 1 -r
+    echo # Add a blank line.
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      printf 'if type brew &>/dev/null; then\n  HOMEBREW_PREFIX=$(brew --prefix)\n  # gnubin; gnuman\n  for d in ${HOMEBREW_PREFIX}/opt/*/libexec/gnubin; do export PATH=$d:$PATH; done\n  # I actually like that man grep gives the BSD grep man page\n  for d in ${HOMEBREW_PREFIX}/opt/*/libexec/gnuman; do export MANPATH=$d:$MANPATH; done\nfi' >> "$HOME/.bash_profile"
+    fi
+  fi
   if [[ "$package" == "pyenv" ]]; then
     brew install openssl readline sqlite3 xz zlib
     if ! grep pyenv "$HOME/.bash_profile" || ! grep pyenv "$HOME/.bashrc"; then
