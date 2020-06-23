@@ -33,7 +33,7 @@ fi
 # TODO - Add more context about each app.
 echo "Here is a list of suggested apps."
 declare -a apps=(
-                "1password"  
+                "1password"
                 "docker"
                 "firefox"
                 "gephi"
@@ -88,12 +88,16 @@ done
 # TODO - Add more context about each package.
 echo "Here is a list of useful packages."
 declare -a packages=(
+                    "bash-completion"
+                    "coreutils"
                     "gcc"
                     "graphviz"
                     "imagemagick"
+                    "jq"
                     "mongodb"
+                    "pyenv"
                     "terminal-notifier"
-                    "wget" 
+                    "wget"
                     )
 
 ## Loop through packages.
