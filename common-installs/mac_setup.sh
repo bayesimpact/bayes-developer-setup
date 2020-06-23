@@ -113,8 +113,17 @@ for package in "${packages[@]}"; do
   if ! which $package > /dev/null; then
     read -p "Would you like to install $package? " -n 1 -r
     echo # Add a blank line.
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-      brew install "$package"
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      continue
     fi
+    brew install "$package"
+    if [[ "$package" == "pyenv" ]]; then
+      brew install openssl readline sqlite3 xz zlib
+      if ! grep pyenv "$HOME/.bash_profile" || ! grep pyenv "$HOME/.bashrc"; then
+        printf '# Use pyenv to manage python versions.\nif command -v pyenv 1>/dev/null 2>&1; then\n  eval "$(pyenv init -)"\nfi\n' >> "HOME/.bash_profile"
+      fi
+      readonly LATEST_PYTHON="$(pyenv install --list | grep -v - | tail -n 1)"
+      pyenv install "$LATEST_PYTHON"
+      pyenv global "$LATEST_PYTHON"
   fi
 done
