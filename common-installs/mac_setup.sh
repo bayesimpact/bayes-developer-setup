@@ -33,7 +33,7 @@ fi
 # TODO - Add more context about each app.
 echo "Here is a list of suggested apps."
 declare -a apps=(
-                "1password"  
+                "1password"
                 "docker"
                 "firefox"
                 "gephi"
@@ -85,15 +85,27 @@ for app in "${apps[@]}"; do
 done
 
 ## Mac packages.
-# TODO - Add more context about each package.
+# TODO(cyrille): Use associative array to add context on prompt.
 echo "Here is a list of useful packages."
 declare -a packages=(
+                    # Autocompletion for CLI in bash.
+                    "bash-completion"
+                    # GNU utils instead of FreeBSD (default) ones. Used in several Bayes scripts.
+                    "coreutils"
+                    # C/C++/Go compiler.
                     "gcc"
                     "graphviz"
+                    # Image manipulator.
                     "imagemagick"
+                    # JSON manipulator. Used in several Bayes scripts.
+                    "jq"
+                    # MongoDB client (and server?).
                     "mongodb"
+                    # Python environment manager.
+                    "pyenv"
                     "terminal-notifier"
-                    "wget" 
+                    # Downloading content from the web. Used in some Bayes scripts.
+                    "wget"
                     )
 
 ## Loop through packages.
