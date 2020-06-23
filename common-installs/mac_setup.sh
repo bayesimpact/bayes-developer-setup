@@ -88,42 +88,38 @@ done
 # TODO(cyrille): Use associative array to add context on prompt.
 echo "Here is a list of useful packages."
 declare -a packages=(
-                    # Autocompletion for CLI in bash.
-                    "bash-completion"
-                    # GNU utils instead of FreeBSD (default) ones. Used in several Bayes scripts.
-                    "coreutils"
-                    # C/C++/Go compiler.
-                    "gcc"
-                    "graphviz"
-                    # Image manipulator.
-                    "imagemagick"
-                    # JSON manipulator. Used in several Bayes scripts.
-                    "jq"
-                    # MongoDB client (and server?).
-                    "mongodb"
-                    # Python environment manager.
-                    "pyenv"
-                    "terminal-notifier"
-                    # Downloading content from the web. Used in some Bayes scripts.
-                    "wget"
-                    )
+  "bash-completion: Autocompletion for CLI in bash."
+  "coreutils: GNU utils instead of FreeBSD (default) ones. Used in several Bayes scripts."
+  "gcc: C/C++/Go compiler."
+  "graphviz: Graph manipulator."
+  "imagemagick: Image manipulator."
+  "jq: JSON manipulator. Used in several Bayes scripts."
+  "mongodb: MongoDB client (and server?)."
+  "pyenv: Python environment manager."
+  "terminal-notifier: Notifications for Terminal."
+  "wget: Downloading content from the web. Used in some Bayes scripts."
+)
 
 ## Loop through packages.
-for package in "${packages[@]}"; do
-  if ! which $package > /dev/null; then
-    read -p "Would you like to install $package? " -n 1 -r
-    echo # Add a blank line.
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-      continue
+for package_with_desc in "${packages[@]}"; do
+  package=$(echo "$package_with_desc" | cut -f1 -d:)
+  if which $package > /dev/null || brew list $package >/dev/null 2>&1; then
+    continue
+  fi
+  echo "$package_with_desc"
+  read -p "Would you like to install it? " -n 1 -r
+  echo # Add a blank line.
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    continue
+  fi
+  brew install "$package"
+  if [[ "$package" == "pyenv" ]]; then
+    brew install openssl readline sqlite3 xz zlib
+    if ! grep pyenv "$HOME/.bash_profile" || ! grep pyenv "$HOME/.bashrc"; then
+      printf '# Use pyenv to manage python versions.\nif command -v pyenv 1>/dev/null 2>&1; then\n  eval "$(pyenv init -)"\nfi\n' >> "HOME/.bash_profile"
     fi
-    brew install "$package"
-    if [[ "$package" == "pyenv" ]]; then
-      brew install openssl readline sqlite3 xz zlib
-      if ! grep pyenv "$HOME/.bash_profile" || ! grep pyenv "$HOME/.bashrc"; then
-        printf '# Use pyenv to manage python versions.\nif command -v pyenv 1>/dev/null 2>&1; then\n  eval "$(pyenv init -)"\nfi\n' >> "HOME/.bash_profile"
-      fi
-      readonly LATEST_PYTHON="$(pyenv install --list | grep -v - | tail -n 1)"
-      pyenv install "$LATEST_PYTHON"
-      pyenv global "$LATEST_PYTHON"
+    readonly LATEST_PYTHON="$(pyenv install --list | grep -v - | tail -n 1)"
+    pyenv install "$LATEST_PYTHON"
+    pyenv global "$LATEST_PYTHON"
   fi
 done
