@@ -107,6 +107,11 @@ for package in "${packages[@]}"; do
     echo # Add a blank line.
     if [[ $REPLY =~ ^[Yy]$ ]]; then
       brew install "$package"
+    else
+      continue
+    fi
+    if [[ "$package" == "bash-completion" ]]; then
+      echo "[ -f /usr/local/etc/bash_completion ] && . /usr/local/etc/bash_completion" >> ~/.bash_profile
     fi
   fi
 done
