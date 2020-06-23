@@ -114,6 +114,9 @@ for package_with_desc in "${packages[@]}"; do
     continue
   fi
   brew install "$package"
+  if [[ "$package" == "bash-completion" ]]; then
+    echo "[ -f /usr/local/etc/bash_completion ] && . /usr/local/etc/bash_completion" >> ~/.bash_profile
+  fi
   if [[ "$package" == "pyenv" ]]; then
     brew install openssl readline sqlite3 xz zlib
     if ! grep pyenv "$HOME/.bash_profile" || ! grep pyenv "$HOME/.bashrc"; then
