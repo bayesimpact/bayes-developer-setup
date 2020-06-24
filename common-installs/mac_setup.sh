@@ -30,26 +30,26 @@ if [[ $? != 0 ]]; then
 fi
 
 ## Mac apps.
-# TODO - Add more context about each app.
-# TODO(cyrille): Clean-up the list for actually useful apps.
 echo "Here is a list of suggested apps."
 declare -a apps=(
-                "1password"
+                # Necessary for most development.
                 "docker"
+                # Useful for browser testing.
                 "firefox"
-                "gephi"
+                # Useful for browser testing.
                 "google-chrome"
-                "hipchat"
+                # A better terminal app.
                 "iterm2"
+                # Useful for running java apps.
                 "java"
-                "mou"
-                "pgadmin3"
-                "postgres"
+                # Chat app almost exclusively used at Bayes
                 "slack"
+                # A pluggable text editor.
                 "sublime-text"
+                # A virtual machine app.
                 "virtual-box"
+                # Tools for coding on macOS (has a simulator for osX testing).
                 "xcode"
-                "xquartz"
                 )
 
 ## Loop through apps.
@@ -86,18 +86,14 @@ for app in "${apps[@]}"; do
 done
 
 ## Mac packages.
-# TODO(cyrille): Clean-up the list for actually useful packages.
 echo "Here is a list of useful packages."
 declare -a packages=(
-  "bash-completion: Autocompletion for CLI in bash."
+  "bash-completion: Autocompletion for CLI in bash. Useful for git, docker-compose, ..."
   "coreutils: GNU utils instead of FreeBSD (default) ones. Used in several Bayes scripts."
-  "gcc: C/C++/Go compiler."
-  "graphviz: Graph manipulator."
+  "gcc: C/C++/Go compiler. We don't use these languages often but it might be useful."
   "imagemagick: Image manipulator."
   "jq: JSON manipulator. Used in several Bayes scripts."
-  "mongodb: MongoDB client (and server?)."
   "pyenv: Python environment manager."
-  "terminal-notifier: Notifications for Terminal."
   "wget: Downloading content from the web. Used in some Bayes scripts."
 )
 
