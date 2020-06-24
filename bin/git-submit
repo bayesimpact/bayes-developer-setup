@@ -131,22 +131,6 @@ if [ -z "${BRANCH_REMOTE}" ]; then
 fi
 
 if [ -z "${NO_SQUASH_ON_GITHUB}" ]; then
-  # Get OAuth Token.
-  # We use the hub config located in ~/.config/hub, it's a yaml file with first
-  # level keys being the server domains. And then it has a subkey with
-  # oauth_token:
-  #   github.com
-  #   - user: pcorpet
-  #     oauth_token: 0123456789abcdef
-  #     protocol: https
-  #   entreprise.github.com
-  #   - user: pascal
-  #     oauth_token: abcdef0123456789
-  readonly GITHUB_OAUTH_TOKEN="$(sed -n '/^github.com/,$p' ~/.config/hub | grep oauth_token | head -1 | cut -d: -f2 | sed -e "s/ //")"
-  if [ -z "${GITHUB_OAUTH_TOKEN}" ]; then
-    echo "Could not find OAuth Token to connect to GitHub API." 1>&2
-    abort
-  fi
 
   # Get GitHub repo name.
   # The remote URL is "git@github.com:bayesimpact/new-project.git" and we want
