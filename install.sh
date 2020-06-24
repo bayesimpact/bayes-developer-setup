@@ -164,4 +164,7 @@ else
   if [ "$(uname)" == "Darwin" ]; then
     ./common-installs/mac_setup.sh
   fi
+
+  ./common-installs/pip_setup.sh
+  # TODO(cyrille): Add lint npm packages.
 fi
