@@ -131,22 +131,6 @@ if [ -z "${BRANCH_REMOTE}" ]; then
 fi
 
 if [ -z "${NO_SQUASH_ON_GITHUB}" ]; then
-  # Get OAuth Token.
-  # We use the hub config located in ~/.config/hub, it's a yaml file with first
-  # level keys being the server domains. And then it has a subkey with
-  # oauth_token:
-  #   github.com
-  #   - user: pcorpet
-  #     oauth_token: 0123456789abcdef
-  #     protocol: https
-  #   entreprise.github.com
-  #   - user: pascal
-  #     oauth_token: abcdef0123456789
-  readonly GITHUB_OAUTH_TOKEN="$(sed -n '/^github.com/,$p' ~/.config/hub | grep oauth_token | head -1 | cut -d: -f2 | sed -e "s/ //")"
-  if [ -z "${GITHUB_OAUTH_TOKEN}" ]; then
-    echo "Could not find OAuth Token to connect to GitHub API." 1>&2
-    abort
-  fi
 
   # Get GitHub repo name.
   # The remote URL is "git@github.com:bayesimpact/new-project.git" and we want
@@ -159,22 +143,16 @@ if [ -z "${NO_SQUASH_ON_GITHUB}" ]; then
   readonly GITHUB_REPO_NAME="${BASH_REMATCH[2]}"
 
   # Find pull-request ID.
-  readonly PULL_REQUEST_NUMBER="$(curl -s \
-    -H "Authorization: token ${GITHUB_OAUTH_TOKEN}" \
-    -G --data-urlencode 'base=master' --data-urlencode "head=${GITHUB_REPO_USER}:${BRANCH_MERGE}" \
-    "https://api.github.com/repos/${GITHUB_REPO_USER}/${GITHUB_REPO_NAME}/pulls" | \
-    # The result is a large JSON nicely indented with one property per line,
-    # and we search for the "number" property: '  "number": 1234' -> '1234'.
-    grep '"number"' | sed -e "s/^.*: //;s/,//")"
+  readonly PULL_REQUEST_NUMBER="$(hub pr list \
+    -b master -h "$GITHUB_REPO_USER:$BRANCH_MERGE" -L1 -f %I)"
   if [[ -z "${PULL_REQUEST_NUMBER}" ]]; then
     echo "Could not find the Pull Request number." 1>&2
     abort
   fi
 
   # Ask GitHub to do the squash and merge!
-  curl --fail -X PUT -H "Authorization: token ${GITHUB_OAUTH_TOKEN}" \
-    "https://api.github.com/repos/${GITHUB_REPO_USER}/${GITHUB_REPO_NAME}/pulls/${PULL_REQUEST_NUMBER}/merge" \
-    --data "{\"merge_method\": \"squash\", \"sha\": \"${BRANCH_INITIAL}\"}" || abort
+  hub api -X PUT "/repos/${GITHUB_REPO_USER}/${GITHUB_REPO_NAME}/pulls/${PULL_REQUEST_NUMBER}/merge" \
+    -F merge_method=squash -F "sha=$BRANCH_INITIAL" || abort
 
   # Update master locally.
   git checkout master
