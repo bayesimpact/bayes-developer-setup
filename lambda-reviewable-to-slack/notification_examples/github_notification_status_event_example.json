@@ -78,7 +78,7 @@
   },
   "branches": [
     {
-      "name": "master",
+      "name": "main",
       "commit": {
         "sha": "81c55c59eb0f1b176cf505141237537d445f10f7",
         "url": "https://api.github.com/repos/bayesimpact/bob-emploi-internal/commits/81c55c59eb0f1b176cf505141237537d445f10f7"
@@ -174,7 +174,7 @@
     "forks": 0,
     "open_issues": 114,
     "watchers": 0,
-    "default_branch": "master"
+    "default_branch": "main"
   },
   "organization": {
     "login": "bayesimpact",
