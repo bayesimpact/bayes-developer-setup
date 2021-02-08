@@ -1,5 +1,7 @@
 #!/bin/bash
 
+readonly DEFAULT_BRANCH="main"
+
 # Parse the command line arguments.
 POSITIONAL=()
 while [[ $# -gt 0 ]]
@@ -36,9 +38,9 @@ if [ -z "${BRANCH}" ]; then
   exit 2
 fi
 
-if [ "${BRANCH}" == "master" ]; then
+if [ "${BRANCH}" == "${DEFAULT_BRANCH}" ]; then
   echo "branch required:" 1>&2
-  git branch | grep -v \ master$ 1>&2
+  git branch | grep -v \ "${DEFAULT_BRANCH}"$ 1>&2
   exit 1
 fi
 
@@ -61,11 +63,11 @@ else
   done
   if [ -z "$remote_branches" ]; then
     # Could not find a remote branch containing any of the 5 last commits :-(
-    readonly REMOTE_BASE_BRANCH=master
+    readonly REMOTE_BASE_BRANCH=DEFAULT_BRANCH
   else
-    if grep "/master\$" <<< "$remote_branches"; then
-      # Just base the PR on master
-      readonly REMOTE_BASE_BRANCH=master
+    if grep "/${DEFAULT_BRANCH}\$" <<< "$remote_branches"; then
+      # Just base the PR on default branch
+      readonly REMOTE_BASE_BRANCH=DEFAULT_BRANCH
     else
       readonly REMOTE_BASE_BRANCH="$(head -n 1 <<< "$remote_branches" | sed -e "s/.*\///")"
       echo "Found a remote branch to base the PR on: $REMOTE_BASE_BRANCH"
@@ -86,7 +88,7 @@ function cleanup_branch_name {
 }
 
 readonly EXISTING_REMOTE_BRANCH=$(git config "branch.${BRANCH}.merge" | sed -e "s/refs.heads.//")
-if [ -n "${EXISTING_REMOTE_BRANCH}" ]  && [ "${EXISTING_REMOTE_BRANCH}" != "master" ]; then
+if [ -n "${EXISTING_REMOTE_BRANCH}" ]  && [ "${EXISTING_REMOTE_BRANCH}" != "${DEFAULT_BRANCH}" ]; then
   readonly REMOTE_BRANCH="${EXISTING_REMOTE_BRANCH}"
 else
   if [ -z "${USERNAME}" ]; then
@@ -121,7 +123,7 @@ if [ -z "${FORCE_PUSH}" ]; then
     # Check if tool exists.
     if [ -z "$(which gitlab)" ] || ! [ -x $(which gitlab) ]; then
       echo "gitlab tool is not installed, please install it:" 1>&2
-      echo "  https://github.com/bayesimpact/bayes-developer-setup/blob/master/gitlab-cli.md" 1>&2
+      echo "  https://github.com/bayesimpact/bayes-developer-setup/blob/${DEFAULT_BRANCH}/gitlab-cli.md" 1>&2
       exit 6
     fi
     # Find Project ID.

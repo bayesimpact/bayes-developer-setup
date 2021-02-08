@@ -193,12 +193,12 @@
       "forks": 0,
       "open_issues": 119,
       "watchers": 0,
-      "default_branch": "master"
+      "default_branch": "main"
     }
   },
   "base": {
-    "label": "bayesimpact:master",
-    "ref": "master",
+    "label": "bayesimpact:main",
+    "ref": "main",
     "sha": "f5003a36dd52cffeb9fb64d4fac788b5b982aa8e",
     "user": {
       "login": "bayesimpact",
@@ -306,7 +306,7 @@
       "forks": 0,
       "open_issues": 119,
       "watchers": 0,
-      "default_branch": "master"
+      "default_branch": "main"
     }
   },
   "_links": {

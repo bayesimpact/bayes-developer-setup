@@ -179,10 +179,10 @@ def generate_slack_messages(github_event_type, github_notification):
     if github_event_type == 'issue_comment':
         github_event_params = _get_all_resources_for_issue_comment_event(github_notification)
     elif github_event_type == 'status':
-        if github_notification['branches'][0]['name'] == 'master':
+        if github_notification['branches'][0]['name'] == 'main':
             # TODO(florian): Also deal with notifications from tags.
-            # We ignore notifications on master.
-            # TODO(florian): Add message when breaking CI on master.
+            # We ignore notifications on main.
+            # TODO(florian): Add message when breaking CI on main.
             return {}
 
         if github_notification['context'].startswith('code-review/reviewable'):
@@ -232,7 +232,7 @@ def _get_all_resources_for_ci_status_event(github_notification):
             "Does not support '{}' status context".format(new_status_event['context']))
     new_ci_status_event = new_status_event
 
-    filter_for_branch = '?base=master&head={}:{}'.format(
+    filter_for_branch = '?base=main&head={}:{}'.format(
         new_ci_status_event['repository']['owner']['login'],
         new_ci_status_event['branches'][0]['name'])
     pull_request_url = new_ci_status_event['repository']['pulls_url'].replace(

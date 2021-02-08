@@ -100,7 +100,7 @@ class ReviewableToSlackTestCase(unittest.TestCase):
                     self._github_issue_comments,
                 'https://api.github.com/repos/bayesimpact/bob-emploi/pulls/5670?per_page=100':
                     self._github_pull_request,
-                'https://api.github.com/repos/bayesimpact/bob-emploi/pulls?base=master&head=bayesimpact:guillaume-fixed-some-bug&per_page=100':  # nopep8 # pylint: disable=line-too-long
+                'https://api.github.com/repos/bayesimpact/bob-emploi/pulls?base=main&head=bayesimpact:guillaume-fixed-some-bug&per_page=100':  # nopep8 # pylint: disable=line-too-long
                     [self._github_pull_request],
                 'https://api.github.com/repos/bayesimpact/bob-emploi/statuses/353ff7e711d0dab6cff5e7e90026c7f8eff05016?per_page=100':  # nopep8 # pylint: disable=line-too-long
                     self._github_statuses,
@@ -275,9 +275,9 @@ class ReviewableToSlackTestCase(unittest.TestCase):
                 'check this code>!',
         }, slack_messages)
 
-    def test_ignore_notifications_on_master(self):
+    def test_ignore_notifications_on_main(self):
         slack_messages = self._generate_slack_messages_for_new_ci_status(
-            'failure', branches=[{'name': 'master'}])
+            'failure', branches=[{'name': 'main'}])
         self.assertEqual({}, slack_messages)
 
     @mock.patch('reviewable_to_slack._DISABLED_SLACK_LOGINS', {'guillaume'})

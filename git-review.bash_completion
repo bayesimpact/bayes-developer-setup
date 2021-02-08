@@ -24,7 +24,7 @@ _git_review()
     if [ -z "$(which gitlab)" ] || ! [ -x $(which gitlab) ]; then
       # TODO(pascal): Fix the error reporting.
       echo "gitlab tool is not installed, please install it:" 1>&2
-      echo "  https://github.com/bayesimpact/bayes-developer-setup/blob/master/gitlab-cli.md" 1>&2
+      echo "  https://github.com/bayesimpact/bayes-developer-setup/blob/main/gitlab-cli.md" 1>&2
       return 2
     fi
     # TODO(pascal): Use cache when/if it gets implemented;

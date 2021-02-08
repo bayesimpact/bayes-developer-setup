@@ -4,7 +4,7 @@ This integration allows developper to be pinged on Slack when they receive code 
 The tech stack pipeline is the following: Reviewable comments -> GitHub webhook -> AWS Lambda + Flask -> Zappier -> Slack.
 The main idea of the notification logic is the following:
 
-* Always finish the Slack notification with a call to action, like: let's review this code, or let's submit to master.
+* Always finish the Slack notification with a call to action, like: let's review this code, or let's submit to main.
 * Only notify reviewers when a demo is ready, in the cases where a demo is being built.
 * Notify reviewees as soon as as reviewers comment on the issue.
 * Notify the reviewer when there are remaining comments to address.
