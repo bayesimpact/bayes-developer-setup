@@ -16,6 +16,11 @@ case $key in
     shift # past argument
     shift # past value
     ;;
+    -b|--base)
+    readonly BASE_BRANCH="$2"
+    shift # past argument
+    shift # past value
+    ;;
     *)
     POSITIONAL+=("$1") # save it in an array for later
     shift # past argument
@@ -29,6 +34,10 @@ readonly REVIEWER=$1
 readonly REMOTE_REPO="origin"
 if [ -z "$USERNAME" ]; then
     readonly USERNAME=$(git config user.email | sed -e "s/@.*$//")
+fi
+
+if [ -z "$BASE_BRANCH" ]; then
+  readonly BASE_BRANCH="$(git rev-parse --abbrev-ref "origin/HEAD" | cut -d/ -f2)"
 fi
 
 readonly BRANCH="$(git rev-parse --abbrev-ref HEAD)"
