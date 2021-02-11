@@ -31,14 +31,16 @@ if [ -z "$USERNAME" ]; then
     readonly USERNAME=$(git config user.email | sed -e "s/@.*$//")
 fi
 
+readonly DEFAULT_BRANCH="$(git rev-parse --abbrev-ref "${REMOTE_REPO}/HEAD" | cut -d/ -f2)"
+
 readonly BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 if [ -z "${BRANCH}" ]; then
   exit 2
 fi
 
-if [ "${BRANCH}" == "master" ]; then
+if [ "${BRANCH}" == "${DEFAULT_BRANCH}" ]; then
   echo "branch required:" 1>&2
-  git branch | grep -v \ master$ 1>&2
+  git branch | grep -v \ $DEFAULT_BRANCH$ 1>&2
   exit 1
 fi
 
@@ -86,7 +88,7 @@ function cleanup_branch_name {
 }
 
 readonly EXISTING_REMOTE_BRANCH=$(git config "branch.${BRANCH}.merge" | sed -e "s/refs.heads.//")
-if [ -n "${EXISTING_REMOTE_BRANCH}" ]  && [ "${EXISTING_REMOTE_BRANCH}" != "master" ]; then
+if [ -n "${EXISTING_REMOTE_BRANCH}" ]  && [ "${EXISTING_REMOTE_BRANCH}" != "${DEFAULT_BRANCH}" ]; then
   readonly REMOTE_BRANCH="${EXISTING_REMOTE_BRANCH}"
 else
   if [ -z "${USERNAME}" ]; then
@@ -121,7 +123,7 @@ if [ -z "${FORCE_PUSH}" ]; then
     # Check if tool exists.
     if [ -z "$(which gitlab)" ] || ! [ -x $(which gitlab) ]; then
       echo "gitlab tool is not installed, please install it:" 1>&2
-      echo "  https://github.com/bayesimpact/bayes-developer-setup/blob/master/gitlab-cli.md" 1>&2
+      echo "  https://github.com/bayesimpact/bayes-developer-setup/blob/${DEFAULT_BRANCH}/gitlab-cli.md" 1>&2
       exit 6
     fi
     # Find Project ID.
