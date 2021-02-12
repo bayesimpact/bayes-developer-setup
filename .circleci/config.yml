@@ -9,12 +9,8 @@ jobs:
       - run:
           name: Run tests
           command: |
-            # Compose docker service with volumes (CircleCI 2.0 does not support this natively).
-            docker-compose-up-remote-env test "test-$CIRCLE_BUILD_NUM"
-            docker exec -t "test-$CIRCLE_BUILD_NUM" cucumber
-            stop-dockers-from-compose-up-remote-env
             # Run docker services without volumes.
-            docker-compose build --pull test-reviewable
+            docker-compose build --pull test test-reviewable
 
 workflows:
   version: 2
