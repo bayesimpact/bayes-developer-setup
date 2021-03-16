@@ -15,4 +15,12 @@ World Module.new {
     }
     return sha1
   end
+
+  def git_default_branch()
+    default_branch = ''
+    cd ('.') {
+      default_branch = `git rev-parse --abbrev-ref "origin/HEAD" | cut -d/ -f2`.chomp
+    }
+    return default_branch
+  end
 }
