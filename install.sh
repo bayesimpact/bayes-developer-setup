@@ -8,6 +8,7 @@
 # It adds the bin folder to the path and the man folder to the manual.
 
 readonly NAME='bayes-developer-setup'
+readonly DEFAULT_BRANCH="$(git rev-parse --abbrev-ref "${REMOTE_REPO}/HEAD" | cut -d/ -f2)"
 
 which git > /dev/null
 if [ $? -ne 0 ]; then
@@ -35,7 +36,7 @@ fi
 
 # Refresh repo.
 echo "Pulling latest version from GitHub."
-git pull --depth=1 origin master 2> /dev/null > /dev/null
+git pull --depth=1 origin $DEFAULT_BRANCH 2> /dev/null > /dev/null
 
 # Rerun this script every week to make sure it keeps everything up-to-date.
 if [ -x "$(which anacron)" ]; then
