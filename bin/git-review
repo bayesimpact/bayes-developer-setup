@@ -31,6 +31,7 @@ if [ -z "$USERNAME" ]; then
     readonly USERNAME=$(git config user.email | sed -e "s/@.*$//")
 fi
 
+#Usually main (and previously master).
 readonly DEFAULT_BRANCH="$(git rev-parse --abbrev-ref "${REMOTE_REPO}/HEAD" | cut -d/ -f2)"
 
 readonly BRANCH="$(git rev-parse --abbrev-ref HEAD)"
@@ -63,11 +64,11 @@ else
   done
   if [ -z "$remote_branches" ]; then
     # Could not find a remote branch containing any of the 5 last commits :-(
-    readonly REMOTE_BASE_BRANCH=master
+    readonly REMOTE_BASE_BRANCH=DEFAULT_BRANCH
   else
-    if grep "/master\$" <<< "$remote_branches"; then
-      # Just base the PR on master
-      readonly REMOTE_BASE_BRANCH=master
+    if grep "/${DEFAULT_BRANCH}\$" <<< "$remote_branches"; then
+      # Just base the PR on default branch
+      readonly REMOTE_BASE_BRANCH=DEFAULT_BRANCH
     else
       readonly REMOTE_BASE_BRANCH="$(head -n 1 <<< "$remote_branches" | sed -e "s/.*\///")"
       echo "Found a remote branch to base the PR on: $REMOTE_BASE_BRANCH"
