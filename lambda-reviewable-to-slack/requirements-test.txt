@@ -1,7 +1,0 @@
--r requirements.txt
-mock
-nose
-nose-watch
-pep8
-pylint
-pylint_quotes
