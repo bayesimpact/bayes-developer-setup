@@ -6,7 +6,7 @@
 #   Submits the given or the current branch.
 #
 # It ensures that the modifications of the branch are rebased on the remote
-# master as exactly one commit. It also cleans up the branch locally and
+# default branch as exactly one commit. It also cleans up the branch locally and
 # remotely.
 #
 # To install it, copy it or link it from /usr/local/bin/git-submit and gzip the
@@ -20,11 +20,14 @@ else
   BRANCH="$1"
   FORCE_SUBMIT="$2"
 fi
+
+readonly DEFAULT_BRANCH="$(git rev-parse --abbrev-ref "origin/HEAD" | cut -d/ -f2)"
+
 if [ -z "${BRANCH}" ]; then
   BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-  if [ "${BRANCH}" == "master" ]; then
+  if [ "${BRANCH}" == "${DEFAULT_BRANCH}" ]; then
     echo "branch required:" 1>&2
-    git branch | grep -v \ master$ 1>&2
+    git branch | grep -v \ $DEFAULT_BRANCH$ 1>&2
     exit 1
   fi
 fi
@@ -60,12 +63,12 @@ fi
 # Get latest code from remote.
 git fetch
 
-# The name of the remote used for master, usually "origin".
-readonly BASE_REMOTE="$(git config branch.master.remote)"
-# The full name of the remote master branch, usually "origin/master".
-readonly BASE_BRANCH="${BASE_REMOTE}/master"
-# Git hash of the latest status of remote master.
-readonly BASE_MASTER="$(git rev-parse "${BASE_BRANCH}")"
+# The name of the remote used for default branch, usually "origin".
+readonly BASE_REMOTE="$(git config branch.${DEFAULT_BRANCH}.remote)"
+# The full name of the remote default branch, usually "origin/default_branch".
+readonly BASE_BRANCH="${BASE_REMOTE}/${DEFAULT_BRANCH}"
+# Git hash of the latest status of remote default branch.
+readonly BASE_DEFAULT="$(git rev-parse "${BASE_BRANCH}")"
 # Git hash of the current branch to submit.
 readonly BRANCH_INITIAL="$(git rev-parse "${BRANCH}")"
 # The name of the remote tracked by this branch, usually "origin".
@@ -77,9 +80,9 @@ readonly BRANCH_MERGE="$(git config "branch.${BRANCH}.merge" | sed -e s/^refs\\/
 function abort {
   echo "Something went wrong, aborting:" 1>&2
 
-  echo "  Set branch master to ${BASE_MASTER}." 1>&2
-  git checkout -f master
-  git reset --hard "${BASE_MASTER}"
+  echo "  Set default branch to ${BASE_DEFAULT}." 1>&2
+  git checkout -f "${DEFAULT_BRANCH}"
+  git reset --hard "${BASE_DEFAULT}"
 
   echo "  Set branch ${BRANCH} to ${BRANCH_INITIAL}." 1>&2
   git checkout -f "${BRANCH}"
@@ -88,14 +91,14 @@ function abort {
   exit 7
 }
 
-# Check that the changes are bundled as one commit on top of origin/master.
-while [ "${BASE_MASTER}" != "$(git rev-parse "${BRANCH}^")" ]; do
-  if [ "${BASE_MASTER}" == "$(git rev-parse "${BRANCH}")" ]; then
+# Check that the changes are bundled as one commit on top of origin/default_branch.
+while [ "${BASE_DEFAULT}" != "$(git rev-parse "${BRANCH}^")" ]; do
+  if [ "${BASE_DEFAULT}" == "$(git rev-parse "${BRANCH}")" ]; then
     echo "No changes to submit."
     exit 3
   fi
-  if ( git merge-base --is-ancestor "$(git rev-parse "${BRANCH}^")" "${BASE_MASTER}" ); then
-    # There is only one new commit, but it's based on an old version of master.
+  if ( git merge-base --is-ancestor "$(git rev-parse "${BRANCH}^")" "${BASE_DEFAULT}" ); then
+    # There is only one new commit, but it's based on an old version of default branch.
     if [[ -n "${NO_SQUASH_ON_GITHUB}" ]] && ! (git rebase "${BASE_BRANCH}" "${BRANCH}"); then
       git rebase --abort
       exit 10
@@ -144,7 +147,7 @@ if [ -z "${NO_SQUASH_ON_GITHUB}" ]; then
 
   # Find pull-request ID.
   readonly PULL_REQUEST_NUMBER="$(hub pr list \
-    -b master -h "$GITHUB_REPO_USER:$BRANCH_MERGE" -L1 -f %I)"
+    -b ${DEFAULT_BRANCH} -h "$GITHUB_REPO_USER:$BRANCH_MERGE" -L1 -f %I)"
   if [[ -z "${PULL_REQUEST_NUMBER}" ]]; then
     echo "Could not find the Pull Request number." 1>&2
     abort
@@ -154,8 +157,8 @@ if [ -z "${NO_SQUASH_ON_GITHUB}" ]; then
   hub api -X PUT "/repos/${GITHUB_REPO_USER}/${GITHUB_REPO_NAME}/pulls/${PULL_REQUEST_NUMBER}/merge" \
     -F merge_method=squash -F "sha=$BRANCH_INITIAL" || abort
 
-  # Update master locally.
-  git checkout master
+  # Update default branch locally.
+  git checkout $DEFAULT_BRANCH
   git pull --ff-only
 else
   # Check that the remote branch is synced with the local one.
@@ -165,20 +168,20 @@ else
     git push -f "${BRANCH_REMOTE}" "${BRANCH}:${BRANCH_MERGE}" || abort
   fi
 
-  # Update master locally.
-  git checkout master
+  # Update default branch locally.
+  git checkout $DEFAULT_BRANCH
   if ! (git rebase "${BRANCH}"); then
     git rebase --abort
     abort
   fi
 
-  # Push updated master to remote.
-  git push "${BASE_REMOTE}" master || abort
+  # Push updated default branch to remote.
+  git push "${BASE_REMOTE}" ${DEFAULT_BRANCH} || abort
 fi
 
 # Remove branch locally and remotely.
 if [[ "${BRANCH}" == "$(git rev-parse --abbrev-ref HEAD)" ]]; then
-  git checkout master
+  git checkout $DEFAULT_BRANCH
 fi
 git branch -D "${BRANCH}"
 if git show-branch "remotes/$BRANCH_REMOTE/$BRANCH_MERGE" > /dev/null; then
