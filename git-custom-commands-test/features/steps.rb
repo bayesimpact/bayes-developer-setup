@@ -14,6 +14,9 @@ Given(/^I am in a "([^"]+)" git repo cloned from "([^"]+)"$/) do |dir_name, clon
 end
 
 Given(/^I create a "([^"]+)" git branch from "([^"]+)"$/) do |branch_name, origin_branch|
+  if origin_branch == 'main'
+    origin_branch = git_default_branch()
+  end
   step %(I successfully run `git checkout -b "#{branch_name}" "#{origin_branch}"`)
 end
 
@@ -23,10 +26,11 @@ Given(/^I commit a file "([^"]+)" with:$/) do |file_name, content|
   step %(I successfully run `git commit -m "No message"`)
 end
 
-Given(/^a file "([^"]+)" is committed on "([^"]+)" git branch in "([^"]+)" with:$/) do |file_name, branch, repo, content|
+Given(/^a file "([^"]+)" is committed on default branch git branch in "([^"]+)" with:$/) do |file_name, repo, content|
+  origin_branch = git_default_branch()
   cd("../#{repo}") {
     sha1 = git_hash('HEAD', '.')
-    step %(I successfully run `git checkout #{branch} --quiet`)
+    step %(I successfully run `git checkout #{origin_branch} --quiet`)
     step %(I commit a file "#{file_name}" with:), content
     step %(I successfully run `git checkout --detach #{sha1} --quiet`)
   }
@@ -34,6 +38,9 @@ end
 
 Given(/^I should be on "([^"]+)" git branch$/) do |name|
   cd('.') {
+    if name == 'default_branch'
+      name = git_default_branch()
+    end
     branch = `git rev-parse --abbrev-ref HEAD`.chomp
     expect(branch).to eql(name)
   }
@@ -52,12 +59,18 @@ Given(/^the "([^"]+)" git branch (?:in "([^"]+)" )?should(?: still)?( not)? exis
   end
 end
 
-Given(/^the "([^"]+)" git branch should be in sync with "([^"]+)" in "([^"]+)"$/) do |name, other_branch, repo|
+Given(/^the default_branch git branch should be in sync with "([^"]+)" in "([^"]+)"$/) do |other_branch, repo|
   dir = '.'
   if repo
     dir = "../#{repo}"
   end
-  sha1 = git_hash(name)
+  default_branch = git_default_branch()
+  if other_branch == 'default_branch'
+    other_branch = git_default_branch()
+  elsif other_branch == 'default_branch^'
+    other_branch = git_default_branch() + '^'
+  end
+  sha1 = git_hash(default_branch)
   other_sha1 = git_hash(other_branch, dir)
   expect(sha1).to eql(other_sha1)
 end
