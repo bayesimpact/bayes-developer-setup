@@ -24,7 +24,7 @@ _git_review()
     if [ -z "$(which gitlab)" ] || ! [ -x $(which gitlab) ]; then
       # TODO(pascal): Fix the error reporting.
       echo "gitlab tool is not installed, please install it:" 1>&2
-      echo "  https://github.com/bayesimpact/bayes-developer-setup/blob/main/gitlab-cli.md" 1>&2
+      echo "  https://github.com/bayesimpact/bayes-developer-setup/blob/master/gitlab-cli.md" 1>&2
       return 2
     fi
     # TODO(pascal): Use cache when/if it gets implemented;
@@ -38,7 +38,7 @@ _git_review()
 
     # TODO(cyrille): Add a nice error message when hub returns an error.
     reviewers="$(hub api -t repos/{owner}/{repo}/assignees --cache 600 | grep login | cut -f 2)"
-  fi
+  fi 
   local remaining_reviewers=$(echo "$reviewers $prev $prev" | tr ', ' "\n" | sort | uniq -u)
   COMPREPLY=( $(compgen -P "$prev" -W "$remaining_reviewers" -- $last) )
   if [[ ${#COMPREPLY[@]} == 1 ]] && [[ ${COMPREPLY[0]} == $cur ]] && [[ ${#remaining_reviewers} > 0 ]]; then

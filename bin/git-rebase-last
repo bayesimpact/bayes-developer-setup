@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Git alias to rebase the last commit of a branch onto another one.
-# Useful to rebase commits started on a different changelist that has been merged in default branch.
+# Useful to rebase commits started on a different changelist that has been merged in master.
 #
 #  x1---x2---x3 base-branch
 #         \
@@ -15,10 +15,10 @@
 #
 # Use as git rebase-last [--onto <base_branch>] <my_branch>
 #
-# Base branch default is usually main (onto).
+# Base branch default is master.
 # Default branch to rebase is HEAD.
 
-onto="$(git rev-parse --abbrev-ref "origin/HEAD" | cut -d/ -f2)"
+onto="master"
 if [[ "$1" == "--onto" ]]; then
     onto="$2"
     shift

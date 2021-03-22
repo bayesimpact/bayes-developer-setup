@@ -25,4 +25,4 @@ experimental:
   notify:
     branches:
       only:
-        - main
+        - master

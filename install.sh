@@ -8,7 +8,6 @@
 # It adds the bin folder to the path and the man folder to the manual.
 
 readonly NAME='bayes-developer-setup'
-readonly DEFAULT_BRANCH="$(git rev-parse --abbrev-ref "${REMOTE_REPO}/HEAD" | cut -d/ -f2)"
 
 which git > /dev/null
 if [ $? -ne 0 ]; then
@@ -30,17 +29,13 @@ cd "${DIR}"
 git rev-parse 2> /dev/null
 if [ $? -ne 0 ]; then
   echo 'First install, connecting to git.'
-  git init -m ${DEFAULT_BRANCH}
+  git init
   git remote add origin https://github.com/bayesimpact/bayes-developer-setup.git
 fi
 
 # Refresh repo.
 echo "Pulling latest version from GitHub."
-readonly CURRENT_BRANCH="$(git branch --show-current)"
-# If current branch is not default branch, change the local branch for default branch.
-if [ "${CURRENT_BRANCH}" -ne "${$DEFAULT_BRANCH}" ]
-  git checkout "origin/${$DEFAULT_BRANCH}"
-git pull --depth=1 origin $DEFAULT_BRANCH 2> /dev/null > /dev/null
+git pull --depth=1 origin master 2> /dev/null > /dev/null
 
 # Rerun this script every week to make sure it keeps everything up-to-date.
 if [ -x "$(which anacron)" ]; then
