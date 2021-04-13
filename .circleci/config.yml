@@ -25,4 +25,5 @@ experimental:
   notify:
     branches:
       only:
-        - master
+        - main
+        - master # TODO(émilie): Delete master when all the repos have main as default branch.

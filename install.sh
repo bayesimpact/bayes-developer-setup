@@ -35,7 +35,7 @@ fi
 
 # Refresh repo.
 echo "Pulling latest version from GitHub."
-git fetch --depth=1 origin master && git reset --hard origin/master 2> /dev/null > /dev/null
+git fetch --depth=1 origin main && git reset --hard origin/main 2> /dev/null > /dev/null
 
 # Rerun this script every week to make sure it keeps everything up-to-date.
 if [ -x "$(which anacron)" ]; then
