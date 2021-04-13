@@ -22,7 +22,21 @@ else
 fi
 
 # Usually main (and previously master).
-readonly DEFAULT_BRANCH="$(git rev-parse --abbrev-ref "origin/HEAD" | cut -d/ -f2)"
+readonly ORIGIN_DEFAULT="$(git rev-parse --abbrev-ref "origin/HEAD")"
+if [ $? -ne 0 ]; then
+  # Get GitHub repo name.
+  # The remote URL is "git@github.com:bayesimpact/new-project.git" and we want
+  # to extract "bayesimpact" and "new-project".
+  if ! [[ "$(git remote get-url "${BRANCH_REMOTE}")" =~ ^git@github.com:(.*)/(.*).git$ ]]; then
+    readonly DEFAULT_BRANCH="main"
+  else
+    GITHUB_REPO_USER="${BASH_REMATCH[1]}"
+    GITHUB_REPO_NAME="${BASH_REMATCH[2]}"
+    readonly DEFAULT_BRANCH="$(hub api repos/${GITHUB_REPO_USER}/${GITHUB_REPO_NAME} | jq -r .default_branch)"
+  fi
+else
+  readonly DEFAULT_BRANCH="$(echo ${ORIGIN_DEFAULT} | cut -d/ -f2)"
+fi
 
 if [ -z "${BRANCH}" ]; then
   BRANCH="$(git rev-parse --abbrev-ref HEAD)"
@@ -136,15 +150,15 @@ fi
 
 if [ -z "${NO_SQUASH_ON_GITHUB}" ]; then
 
-  # Get GitHub repo name.
-  # The remote URL is "git@github.com:bayesimpact/new-project.git" and we want
-  # to extract "bayesimpact" and "new-project".
-  if ! [[ "$(git remote get-url "${BRANCH_REMOTE}")" =~ ^git@github.com:(.*)/(.*).git$ ]]; then
-    echo "Could not find the GitHub repository's name." 1>&2
-    abort
+  if [-z "${GITHUB_REPO_USER}" ]; then
+    if ! [[ "$(git remote get-url "${BRANCH_REMOTE}")" =~ ^git@github.com:(.*)/(.*).git$ ]]; then
+      echo "Could not find the GitHub repository's name." 1>&2
+      abort
+    fi
   fi
-  readonly GITHUB_REPO_USER="${BASH_REMATCH[1]}"
-  readonly GITHUB_REPO_NAME="${BASH_REMATCH[2]}"
+
+  GITHUB_REPO_USER="${BASH_REMATCH[1]}"
+  GITHUB_REPO_NAME="${BASH_REMATCH[2]}"
 
   # Find pull-request ID.
   readonly PULL_REQUEST_NUMBER="$(hub pr list \
