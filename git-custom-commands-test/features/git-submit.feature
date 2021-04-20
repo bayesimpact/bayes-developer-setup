@@ -82,7 +82,7 @@ Feature: git submit
 
   Scenario: Change default branch name
     Given a dummy git repo in "origin"
-    And I switch "origin" to "master"
+    And I switch "origin" to "master" branch
     And I am in a "work" git repo cloned from "origin"
     And I should be on "master" git branch
     And I commit a file "successful submission" with:

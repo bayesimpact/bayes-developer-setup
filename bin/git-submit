@@ -21,8 +21,44 @@ else
   FORCE_SUBMIT="$2"
 fi
 
-# Usually main (and previously master).
-readonly DEFAULT_BRANCH="$(git rev-parse --abbrev-ref "origin/HEAD" | cut -d/ -f2)"
+# The name of the remote used for default distant branch, usually "origin".
+readonly BASE_REMOTE_MAIN="$(git config branch.main.remote)"
+readonly BASE_REMOTE_MASTER="$(git config branch.master.remote)"
+if [ "${BASE_REMOTE_MAIN}" != "" ]; then
+  readonly BASE_REMOTE=${BASE_REMOTE_MAIN}
+elif [ "${BASE_REMOTE_MASTER}" != "" ]; then
+  readonly BASE_REMOTE=${BASE_REMOTE_MASTER}
+else
+  echo "No default remote name found." 1>&2
+  exit 13
+fi
+
+# Get GitHub repo name.
+# The remote URL is "git@github.com:bayesimpact/new-project.git" and we want
+# to extract "bayesimpact" and "new-project".
+if [ -z "${GITHUB_REPO_USER}" ]; then
+  if [[ "$(git remote get-url "${BASE_REMOTE}")" =~ ^git@github.com:(.*)/(.*).git$ ]]; then
+    readonly GITHUB_REPO_USER="${BASH_REMATCH[1]}"
+    readonly GITHUB_REPO_NAME="${BASH_REMATCH[2]}"
+  fi
+fi
+
+# Compute DEFAULT_REMOTE_BRANCH which is usually main (and previously master).
+# No readonly because it prevents from getting the rev-parse exit code.
+ORIGIN_DEFAULT="$(git rev-parse --abbrev-ref "${BASE_REMOTE}/HEAD" 2> /dev/null)"
+if [ $? -ne 0 ]; then
+  if [ -z "${GITHUB_REPO_USER}" ]; then
+    readonly DEFAULT_REMOTE_BRANCH="$(hub api repos/{owner}/{repo} | jq -r .default_branch)"
+  else # Default case: main is the default branch.
+    readonly DEFAULT_REMOTE_BRANCH="main"
+  fi
+else
+  readonly DEFAULT_REMOTE_BRANCH="$(cut -d/ -f2 <<< "${ORIGIN_DEFAULT}")"
+fi
+
+# Compute DEFAULT_BRANCH which is usually main (and previously master).
+readonly DEFAULT_REMOTE_OVERVIEW="$(git branch -vv | grep ${BASE_REMOTE}/${DEFAULT_REMOTE_BRANCH})"
+readonly DEFAULT_BRANCH="$(cut -d" " -f2 <<< ${DEFAULT_REMOTE_OVERVIEW})"
 
 if [ -z "${BRANCH}" ]; then
   BRANCH="$(git rev-parse --abbrev-ref HEAD)"
@@ -32,6 +68,9 @@ if [ -z "${BRANCH}" ]; then
     exit 1
   fi
 fi
+
+# The name of the remote tracked by this branch, usually "origin".
+readonly BRANCH_REMOTE="$(git config "branch.${BRANCH}.remote")"
 
 # Disable specific option if user has the experimental NO_GIT_SUBMIT_EXPERIMENTAL env var set.
 readonly NO_SQUASH_ON_GITHUB="${NO_GIT_SUBMIT_EXPERIMENTAL}"
@@ -64,16 +103,12 @@ fi
 # Get latest code from remote.
 git fetch
 
-# The name of the remote used for default branch, usually "origin".
-readonly BASE_REMOTE="$(git config branch.${DEFAULT_BRANCH}.remote)"
 # The full name of the remote default branch, usually "origin/default_branch".
-readonly BASE_BRANCH="${BASE_REMOTE}/${DEFAULT_BRANCH}"
+readonly BASE_BRANCH="${BASE_REMOTE}/${DEFAULT_REMOTE_BRANCH}"
 # Git hash of the latest status of remote default branch.
 readonly BASE_DEFAULT="$(git rev-parse "${BASE_BRANCH}")"
 # Git hash of the current branch to submit.
 readonly BRANCH_INITIAL="$(git rev-parse "${BRANCH}")"
-# The name of the remote tracked by this branch, usually "origin".
-readonly BRANCH_REMOTE="$(git config "branch.${BRANCH}.remote")"
 # The name of the remote branch tracked by this one.
 readonly BRANCH_MERGE="$(git config "branch.${BRANCH}.merge" | sed -e s/^refs\\/heads\\///)"
 
@@ -136,19 +171,14 @@ fi
 
 if [ -z "${NO_SQUASH_ON_GITHUB}" ]; then
 
-  # Get GitHub repo name.
-  # The remote URL is "git@github.com:bayesimpact/new-project.git" and we want
-  # to extract "bayesimpact" and "new-project".
-  if ! [[ "$(git remote get-url "${BRANCH_REMOTE}")" =~ ^git@github.com:(.*)/(.*).git$ ]]; then
+  if [ -z "${GITHUB_REPO_USER}" ]; then
     echo "Could not find the GitHub repository's name." 1>&2
     abort
   fi
-  readonly GITHUB_REPO_USER="${BASH_REMATCH[1]}"
-  readonly GITHUB_REPO_NAME="${BASH_REMATCH[2]}"
 
   # Find pull-request ID.
   readonly PULL_REQUEST_NUMBER="$(hub pr list \
-    -b ${DEFAULT_BRANCH} -h "$GITHUB_REPO_USER:$BRANCH_MERGE" -L1 -f %I)"
+    -b ${DEFAULT_REMOTE_BRANCH} -h "$GITHUB_REPO_USER:$BRANCH_MERGE" -L1 -f %I)"
   if [[ -z "${PULL_REQUEST_NUMBER}" ]]; then
     echo "Could not find the Pull Request number." 1>&2
     abort
