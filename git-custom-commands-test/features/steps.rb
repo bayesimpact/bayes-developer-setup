@@ -3,9 +3,18 @@ Given(/^a dummy git repo in "([^"]+)"$/) do |dir_name|
   cd(dir_name) {
     step %(I successfully run `git init --quiet`)
     step %(I commit a file "dummy" with:), %(dummy content)
-    step %(I successfully run `git branch -m main --quiet`)
     # Hop in detached mode so that the branches can be updated.
     step %(I successfully run `git checkout --detach --quiet`)
+  }
+end
+
+Given(/^a dummy git repo in "([^"]+)" whose default branch is "([^"]+)"$/) do |dir_name, branch|
+  step %(a directory named "#{dir_name}")
+  cd(dir_name) {
+    step %(I successfully run `git init --quiet`)
+    step %(I commit a file "dummy" with:), %(dummy content)
+    # Hop in detached mode so that the branches can be updated.
+    step %(I successfully run `git checkout #{branch}`)
   }
 end
 
@@ -65,6 +74,6 @@ end
 
 Given(/^I switch "([^"]+)" to "([^"]+)" branch$/) do |dir_name, branch|
   cd(dir_name) {
-    step %(I successfully run `git checkout "#{branch}"`)
+    step %(I successfully run `git branch -m "#{branch}"`)
   }
 end
