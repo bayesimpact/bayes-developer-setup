@@ -6,6 +6,8 @@ services:
       dockerfile: git-custom-commands-test/Dockerfile
     volumes:
       - ./git-custom-commands-test:/test
+      - ./bin/git-review:/usr/bin/git-review
+      - ./bin/git-submit:/usr/bin/git-submit
   test-reviewable:
     build:
       context: reviewable
