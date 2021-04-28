@@ -81,15 +81,15 @@ Feature: git submit
     And the file "conflict" should contain "Something else"
 
   Scenario: Change default branch name
-    Given a dummy git repo in "origin"
-    And I switch "origin" to "master"
+    Given a dummy git repo in "origin" whose default branch is "default"
     And I am in a "work" git repo cloned from "origin"
-    And I should be on "master" git branch
+    And I should be on "default" git branch
+    And I create a "feature" git branch from "default"
     And I commit a file "successful submission" with:
       """
       Whatever
       """
-    And I successfully run `git push -u origin work`
+    And I successfully run `git push -u origin feature`
     When I run `git submit`
     Then the exit status should be 0
-    And I should be on "master" git branch
+    And I should be on "default" git branch

@@ -9,6 +9,17 @@ Given(/^a dummy git repo in "([^"]+)"$/) do |dir_name|
   }
 end
 
+Given(/^a dummy git repo in "([^"]+)" whose default branch is "([^"]+)"$/) do |dir_name, branch|
+  step %(a directory named "#{dir_name}")
+  cd(dir_name) {
+    step %(I successfully run `git init --quiet`)
+    step %(I commit a file "dummy" with:), %(dummy content)
+    step %(I successfully run `git branch -m #{branch} --quiet`)
+    # Hop in detached mode so that the branches can be updated.
+    step %(I successfully run `git checkout --detach #{branch} --quiet`)
+  }
+end
+
 Given(/^I am in a "([^"]+)" git repo cloned from "([^"]+)"$/) do |dir_name, cloned_dir|
   step %(I successfully run `git clone "#{cloned_dir}/.git" "#{dir_name}" --quiet`)
   step %(I cd to "#{dir_name}")
@@ -61,10 +72,4 @@ Given(/^the "([^"]+)" git branch should be in sync with "([^"]+)" in "([^"]+)"$/
   sha1 = git_hash(name)
   other_sha1 = git_hash(other_branch, dir)
   expect(sha1).to eql(other_sha1)
-end
-
-Given(/^I switch "([^"]+)" to "([^"]+)" branch$/) do |dir_name, branch|
-  cd(dir_name) {
-    step %(I successfully run `git checkout "#{branch}"`)
-  }
 end
