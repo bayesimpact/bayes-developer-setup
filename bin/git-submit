@@ -178,8 +178,7 @@ if [ -z "${NO_SQUASH_ON_GITHUB}" ]; then
   fi
 
   # Find pull-request ID.
-  readonly PULL_REQUEST_NUMBER="$(hub pr list \
-    -b ${DEFAULT_REMOTE_BRANCH} -h "$GITHUB_REPO_USER:$BRANCH_MERGE" -L1 -f %I)"
+  readonly PULL_REQUEST_NUMBER="$(hub pr show -h "$GITHUB_REPO_USER:$BRANCH_MERGE" -f %I)"
   if [[ -z "${PULL_REQUEST_NUMBER}" ]]; then
     echo "Could not find the Pull Request number." 1>&2
     abort
