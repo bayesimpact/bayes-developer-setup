@@ -117,7 +117,7 @@ if [ -d "$AUTOCOMPLETE_PATH" ]; then
 fi
 
 # Install hub.
-HUB_VERSION="2.8.3"
+HUB_VERSION="2.14.2"
 if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.* //")" != "${HUB_VERSION}" ]; then
 
   if [ "$(uname)" == "Darwin" ]; then

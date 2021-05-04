@@ -35,6 +35,7 @@ fi
 # Get GitHub repo user.
 # The remote URL is "git@github.com:bayesimpact/new-project.git" and we want
 # to extract "bayesimpact" and "new-project".
+# TODO(cyrille): Rename to IS_GITHUB_REPO and simplify.
 if [[ "$(git remote get-url "${BASE_REMOTE}")" =~ ^git@github.com:(.*)/(.*).git$ ]]; then
   readonly GITHUB_REPO_USER="${BASH_REMATCH[1]}"
 fi
@@ -172,14 +173,8 @@ fi
 
 if [ -z "${NO_SQUASH_ON_GITHUB}" ]; then
 
-  if [ -z "${GITHUB_REPO_USER}" ]; then
-    echo "Could not find the GitHub repository's name." 1>&2
-    abort
-  fi
-
   # Find pull-request ID.
-  readonly PULL_REQUEST_NUMBER="$(hub pr list \
-    -b ${DEFAULT_REMOTE_BRANCH} -h "$GITHUB_REPO_USER:$BRANCH_MERGE" -L1 -f %I)"
+  readonly PULL_REQUEST_NUMBER="$(git checkout "$BRANCH" && hub pr show -f %I)"
   if [[ -z "${PULL_REQUEST_NUMBER}" ]]; then
     echo "Could not find the Pull Request number." 1>&2
     abort
