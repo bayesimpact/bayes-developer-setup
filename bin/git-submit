@@ -62,6 +62,18 @@ function get_default_branch {
 # Compute DEFAULT_BRANCH which is usually main (and previously master).
 readonly DEFAULT_BRANCH=$(get_default_branch)
 
+# Ask Github to merge this PR once CI is successful.
+function enable_auto_merge {
+  local pull_request_id="$(hub api repos/{owner}/{repo}/pulls/$1 | jq -r .node_id)"
+  hub api graphql -f query='
+    mutation AutoMerge($pullRequestId: ID!) {
+      enablePullRequestAutoMerge(input: {pullRequestId: $pullRequestId, mergeMethod: SQUASH}) {
+        pullRequest {autoMergeRequest {enabledAt}}
+      }
+    }' -f pullRequestId="$pull_request_id" |
+    jq -e '.data.enablePullRequestAutoMerge.pullRequest.autoMergeRequest.enabledAt'
+}
+
 if [ -z "${BRANCH}" ]; then
   BRANCH="$(git rev-parse --abbrev-ref HEAD)"
   if [ "${BRANCH}" == "${DEFAULT_BRANCH}" ]; then
@@ -92,9 +104,15 @@ if [ -x "$(which hub)" ]; then
     if [ "${FORCE_SUBMIT}" == "-f" ] || [ "${FORCE_SUBMIT}" == "--force" ]; then
       echo "WARNING: forcing submission despite CI status \"${CI_STATUS}\"."
     else
-      echo "Continuous integration is \"${CI_STATUS}\", use \"-f\" to submit anyway:"
-      hub ci-status -v "${BRANCH}"
-      exit 11
+      echo "Continuous integration is \"${CI_STATUS}\""
+      read -p "Do you want to enable auto-merge? [y/N]" answer
+      if [ "${answer}" == "y" ] || [ "${answer}" == "Y" ]; then
+        readonly AUTO_MERGE=1
+      else
+        echo 'Use "git submit -f" if you want to force submission.'
+        hub ci-status -v "${BRANCH}"
+        exit 11
+      fi
     fi
   fi
 fi
@@ -186,8 +204,18 @@ if [ -z "${NO_SQUASH_ON_GITHUB}" ]; then
   fi
 
   # Ask GitHub to do the squash and merge!
-  hub api -X PUT "/repos/{owner}/{repo}/pulls/${PULL_REQUEST_NUMBER}/merge" \
-    -F merge_method=squash -F "sha=$BRANCH_INITIAL" || abort
+  if [ -n "$AUTO_MERGE" ]; then
+    if enable_auto_merge "$PULL_REQUEST_ID" ; then
+      echo "Your branch will be merged once CI is successful."
+    else
+      echo "Something went wrong while auto-merging your PR."
+      echo "Maybe the CI turned to green, please try again."
+      abort
+    fi
+  else
+    hub api -X PUT "/repos/{owner}/{repo}/pulls/${PULL_REQUEST_NUMBER}/merge" \
+      -F merge_method=squash -F "sha=$BRANCH_INITIAL" || abort
+  fi
 
   # Update default branch locally.
   git checkout $DEFAULT_BRANCH
@@ -216,6 +244,6 @@ if [[ "${BRANCH}" == "$(git rev-parse --abbrev-ref HEAD)" ]]; then
   git checkout $DEFAULT_BRANCH
 fi
 git branch -D "${BRANCH}"
-if git show-branch "remotes/$BRANCH_REMOTE/$BRANCH_MERGE" > /dev/null; then
+if [ -z "$AUTO_MERGE" ] && git show-branch "remotes/$BRANCH_REMOTE/$BRANCH_MERGE" > /dev/null; then
   git push -d ${BRANCH_REMOTE} "${BRANCH_MERGE}"
 fi
