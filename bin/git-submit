@@ -61,9 +61,10 @@ function get_default_branch {
 }
 # Compute DEFAULT_BRANCH which is usually main (and previously master).
 readonly DEFAULT_BRANCH=$(get_default_branch)
+readonly START_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
 if [ -z "${BRANCH}" ]; then
-  BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+  BRANCH="$START_BRANCH"
   if [ "${BRANCH}" == "${DEFAULT_BRANCH}" ]; then
     echo "branch required:" 1>&2
     git branch | grep -v \ $DEFAULT_BRANCH$ 1>&2
@@ -124,6 +125,10 @@ function abort {
   echo "  Set branch ${BRANCH} to ${BRANCH_INITIAL}." 1>&2
   git checkout -f "${BRANCH}"
   git reset --hard "${BRANCH_INITIAL}"
+
+  if [[ "$START_BRANCH" != "$BRANCH" ]]; then
+    git checkout -f "$START_BRANCH"
+  fi
 
   exit 7
 }
