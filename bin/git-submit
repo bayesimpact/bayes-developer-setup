@@ -32,19 +32,16 @@ else
   readonly BASE_REMOTE="origin"
 fi
 
-# Get GitHub repo user.
-# The remote URL is "git@github.com:bayesimpact/new-project.git" and we want
-# to extract "bayesimpact" and "new-project".
-# TODO(cyrille): Rename to IS_GITHUB_REPO and simplify.
-if [[ "$(git remote get-url "${BASE_REMOTE}")" =~ ^git@github.com:(.*)/(.*).git$ ]]; then
-  readonly GITHUB_REPO_USER="${BASH_REMATCH[1]}"
+# Check if hub is installed, and if the repo is on Github.
+if command -v hub && hub browse -u > /dev/null; then
+  readonly CAN_USE_HUB="1"
 fi
 
 # Compute DEFAULT_REMOTE_BRANCH which is usually main (and previously master).
 # No readonly because it prevents from getting the rev-parse exit code.
 ORIGIN_DEFAULT="$(git rev-parse --abbrev-ref "${BASE_REMOTE}/HEAD" 2> /dev/null)"
 if [ $? -ne 0 ]; then
-  if [ -z "${GITHUB_REPO_USER}" ]; then
+  if [ -n "${CAN_USE_HUB}" ]; then
     readonly DEFAULT_REMOTE_BRANCH="$(hub api repos/{owner}/{repo} | jq -r .default_branch)"
   else # Default case: main is the default branch.
     readonly DEFAULT_REMOTE_BRANCH="main"
@@ -88,7 +85,7 @@ if ! git rev-parse --verify "${BRANCH}" 2>&1 > /dev/null; then
 fi
 
 # Ensures that the Continuous Integration is successful.
-if [ -x "$(which hub)" ]; then
+if [ -n "$CAN_USE_HUB" ]; then
   readonly CI_STATUS="$(hub ci-status "${BRANCH}")"
   if [ "${CI_STATUS}" != "success" ]; then
     if [ "${FORCE_SUBMIT}" == "-f" ] || [ "${FORCE_SUBMIT}" == "--force" ]; then
@@ -177,7 +174,7 @@ if [ -z "${BRANCH_REMOTE}" ]; then
   exit 5
 fi
 
-if [ -z "${NO_SQUASH_ON_GITHUB}" ]; then
+if [ -z "${NO_SQUASH_ON_GITHUB}" ] && [ -n "$CAN_USE_HUB" ] ; then
 
   # Find pull-request ID.
   readonly PULL_REQUEST_NUMBER="$(git checkout -q "$BRANCH" && hub pr show -f %I)"
