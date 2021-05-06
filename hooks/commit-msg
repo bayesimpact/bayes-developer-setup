@@ -11,13 +11,22 @@ readonly CONTEXT_MAX_LENGTH=15
 readonly SUBJECT_MAX_LENGTH=59
 readonly BODY_MAX_LENGTH=72
 
+readonly TOPIC_REGEX='^\[[^\]]{2,'"$CONTEXT_MAX_LENGTH"'}\]'
+readonly SUBJECT_REGEX='(?<=\] ).{2,'"$SUBJECT_MAX_LENGTH"'}\.$'
+readonly PROBABLE_FLAG_REGEX='^\w+\s*(=|#\d+)'
+readonly PROBABLE_ISSUE_REGEX='^\w+\s*#\d+'
+readonly PROPER_ISSUE_REGEX='^(For|Fix) #\d+(, #\d+)*$'
+readonly PROBABLE_VAR_REGEX='^[A-Z]+\s*='
+readonly PROPER_VAR_REGEX='^[A-Z]+=(\S|$)'
+
+
 # Ensure context format and length.
-grep -qP '^\[[^\]]{2,'"$CONTEXT_MAX_LENGTH"'}\]' "$COMMIT_MSG_FILE" ||
+grep -qP "$TOPIC_REGEX" <<< "$COMMIT_MSG_FILE" ||
   die 'Message should start with a bracketed topic of maximum length '"$CONTEXT_MAX_LENGTH"'. E.g. "[Clean Code]"'
 
 # Ensure subject format and length.
-readonly SUBJECT="$(head -n1 "$COMMIT_MSG_FILE")"
-grep -qP '(?<=\] ).{1,'"$SUBJECT_MAX_LENGTH"'}\.$' <<< "$SUBJECT" ||
+readonly SUBJECT=$(head -n1 <<< "$COMMIT_MSG_FILE")
+grep -qP "$SUBJECT_REGEX" <<< "$SUBJECT" ||
   die 'Commit message should be no more than '"$SUBJECT_MAX_LENGTH"`
   `' characters long, start with an uppercase letter and end with a period.
   Example: "Fix the padding on the landing title."'
@@ -33,12 +42,12 @@ readonly BODY_AND_FLAGS="$(tail -n +3 "$COMMIT_MSG_FILE")"
 FLAGS=$(awk -v RS= '{paragraph=$0} END {print paragraph}' <<< "$BODY_AND_FLAGS")
 
 # Check whether the last paragraph of the body has flags (issue reference or commit variable).
-if grep -qP '^\w+\s*(=|#\d+)' <<< "$FLAGS"; then
+if grep -qP "$PROBABLE_FLAG_REGEX" <<< "$FLAGS"; then
   # Ensure variables are uppercase and without spacing.
-  grep -P '^\w+\s*=' <<< "$FLAGS" | grep -vP '^[A-Z]+\s*=' &&
+  grep -P "$PROBABLE_VAR_REGEX" <<< "$FLAGS" | grep -vP "$PROPER_VAR_REGEX" &&
     die 'Commit variables assignment should be bash-like: "VAR=value".'
   # Ensure the issue reference is well formated: "For #1234, #2345".
-  grep -P '^\w+\s*#\d+' <<< "$FLAGS" | grep -vP '^(For|Fix) #\d+(, #\d+)*$' &&
+  grep -P "$PROBABLE_ISSUE_REGEX" <<< "$FLAGS" | grep -vP "$PROPER_ISSUE_REGEX" &&
     die 'Issue references should be introduced by either "For" or "Fix" and separated by ", ".'
 else
   FLAGS=""
@@ -46,7 +55,7 @@ fi
 
 readonly BODY="$(head -n -"$(wc -l <<< "$FLAGS")" <<< "$BODY_AND_FLAGS")"
 # Ensure there are no variables or references in the body.
-grep -vP '^\w+\s*(=|#\d+)' <<< "$BODY" &&
+grep -vP "$PROBABLE_FLAG_REGEX" <<< "$BODY" &&
   die 'Commit variables and issue references should be in the last paragraph of the message.'
 # Ensure the body is no more than 72 chars wide.
 [[ $(wc -L <<< "$BODY") -lt $BODY_MAX_LENGTH ]] ||
