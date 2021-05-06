@@ -78,7 +78,7 @@ elif [ -x "$(which crontab)" ]; then
   rm "${TMP_CRON}"
 fi
 
-readonly SHELLRC="${HOME}/.${SHELL#/bin/}rc"
+readonly SHELLRC="${HOME}/.${SHELL#*/bin/}rc"
 function add_to_shellrc {
   local label=$1
   local line=$2
@@ -88,7 +88,7 @@ function add_to_shellrc {
   sed -i -e "/${marker}/d" "${SHELLRC}" 2> /dev/null
   echo "${line}${marker}" >> "${SHELLRC}"
 
-  if [ "$(uname)" == "Darwin" ] && ! grep $SHELLRC "$HOME/.bash_profile"; then
+  if [ "$(uname)" == "Darwin" ] && ! grep -q $SHELLRC "$HOME/.bash_profile"; then
     printf "if [ -f \"$SHELLRC\" ]; then\n  source $SHELLRC\nfi\n" >> "$HOME/.bash_profile"
   fi
 }
