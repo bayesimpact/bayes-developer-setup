@@ -35,7 +35,7 @@ else
 fi
 
 # Check if hub is installed, and if the repo is on Github.
-if command -v hub && hub browse -u > /dev/null; then
+if command -v hub > /dev/null && hub browse -u > /dev/null; then
   readonly CAN_USE_HUB="1"
 fi
 
@@ -72,7 +72,7 @@ function enable_auto_merge {
         pullRequest {autoMergeRequest {enabledAt}}
       }
     }' -f pullRequestId="$pull_request_id" |
-    jq -e '.data.enablePullRequestAutoMerge.pullRequest.autoMergeRequest.enabledAt'
+    jq -e '.data.enablePullRequestAutoMerge.pullRequest.autoMergeRequest.enabledAt' > /dev/null
 }
 
 if [ -z "${BRANCH}" ]; then
@@ -108,6 +108,7 @@ if [ -n "$CAN_USE_HUB" ]; then
       echo "Continuous integration is \"${CI_STATUS}\""
       if [ -z "$GIT_SUBMIT_AUTO_MERGE" ]; then
         read -n1 -p "Do you want to enable auto-merge? [y/N]" answer
+        echo ''
         echo "You can avoid this question by setting GIT_SUBMIT_AUTO_MERGE to 0 or 1 in your environment."
         if [ "${answer}" == "y" ] || [ "${answer}" == "Y" ]; then
           GIT_SUBMIT_AUTO_MERGE=1
@@ -218,7 +219,7 @@ if [ -z "${NO_SQUASH_ON_GITHUB}" ] && [ -n "$CAN_USE_HUB" ] ; then
     fi
   else
     hub api -X PUT "/repos/{owner}/{repo}/pulls/${PULL_REQUEST_NUMBER}/merge" \
-      -F merge_method=squash -F "sha=$BRANCH_INITIAL" || abort
+      -F merge_method=squash -F "sha=$BRANCH_INITIAL" | jq -r '.message' || abort
   fi
 
   # Update default branch locally.
