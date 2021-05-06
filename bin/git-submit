@@ -119,6 +119,8 @@ if [ -n "$CAN_USE_HUB" ]; then
         exit 11
       fi
     fi
+  else
+    GIT_SUBMIT_AUTO_MERGE=0
   fi
 fi
 
