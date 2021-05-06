@@ -10,6 +10,16 @@ fi
 function install_if_agree() {
     local question=$1
     shift
+    local has_missing_package
+    for package in $@; do
+      if ! pip show -qq $package; then
+        has_missing_package=1
+        break
+      fi
+    done
+    if [ -z "$has_missing_package" ]; then
+      return
+    fi
     read -p "$question " -n 1 -r
     echo # Add a blank line.
     if [[ $REPLY =~ ^[Yy]$ ]]; then
