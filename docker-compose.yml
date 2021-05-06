@@ -8,6 +8,13 @@ services:
       - ./git-custom-commands-test:/test
       - ./bin/git-review:/usr/bin/git-review
       - ./bin/git-submit:/usr/bin/git-submit
+  test-hooks:
+    build:
+      context: .
+      dockerfile: git-hooks-test/Dockerfile
+    volumes:
+      - ./git-hooks-test:/test
+      - ./hooks:/usr/share/hooks
   test-reviewable:
     build:
       context: reviewable
