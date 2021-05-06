@@ -36,16 +36,29 @@ FLAGS=$(awk -v RS= '{paragraph=$0} END {print paragraph}' <<< "$BODY_AND_FLAGS")
 if grep -qP '^\w+\s*(=|#\d+)' <<< "$FLAGS"; then
   ISSUE_REF="$(tail -n1 <<< "$FLAGS")"
   # Check whether the last flag is an issue reference.
-  # TODO(cyrille): Check when there are both 'For' and 'Fix' references.
-  if [[ "$ISSUE_REF" =~ ^\w+\s*\#(\d+) ]]; then
-    # TODO(cyrille): Check multiple issue references.
-    readonly ISSUE_NUMBER="${BASH_REMATCH[0]}"
-    [[ $ISSUE_REF == "For #"$ISSUE_NUMBER ]] ||
-      [[ $ISSUE_REF == "Fix #"$ISSUE_NUMBER ]] ||
-      die 'Issue reference should either be introduced by "For" or "Fix".'
+  if grep -qP '^\w+\s*#\d+' <<< "$ISSUE_REF"; then
+    # Ensure the issue reference is well formated: "For #1234, #2345".
+    grep -qP '^(For|Fix) #\d+(, #\d+)*$' <<< "$ISSUE_REF" ||
+      die 'Issue references should be introduced by either "For" or "Fix" and separated by ", ".'
+    FOR_OR_FIX="$(cut -c-3 <<< "$ISSUE_REF")"
     VARS="$(head -n -1 <<< "$FLAGS")"
+    ISSUE_REF="$(tail -n1 <<< "$VARS")"
+    # Check whether the penultimate flag is an issue reference.
+    if grep -qP '^\w+\s*#\d+' <<< "$ISSUE_REF"; then
+      # Ensure "Fix" is before "For".
+      [[ $FOR_OR_FIX == For ]] || die 'Fixed issued should be given before reference:
+        Fix #1234
+        For #4321'
+      # Ensure the issue reference is well formated: "Fix #1234, #2345".
+      grep -qP '^Fix #\d+(, #\d+)*$' <<< "$ISSUE_REF" ||
+        die 'Fixed issues should be introduced by "Fix" and separated by ", ".'
+      VARS="$(head -n -1 <<< "$VARS")"
+    fi
   else
     VARS="$FLAGS"
+  fi
+  if [ -z "$VARS" ]; then
+    exit
   fi
   # Ensure there's no issue reference outside the last line of the flags.
   grep -P '^\w+\s*#\d+' <<< "$VARS" &&
