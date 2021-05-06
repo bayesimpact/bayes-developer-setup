@@ -101,6 +101,23 @@ if ! git rev-parse --verify "${BRANCH}" 2>&1 > /dev/null; then
   exit 8
 fi
 
+function get_pull_request_number {
+  git checkout -q "$BRANCH" && (hub pr show -f %I; git checkout -q -)
+}
+
+function is_auto_mergeable {
+  # TODO(cyrille): Factorize with the actual auto_merge enabling.
+  local pull_request_id="$(hub api repos/{owner}/{repo}/pulls/$(get_pull_request_number) | jq -r .node_id)"
+  hub api graphql -f query='
+    query IsAutoMergeable($pullRequestId: ID!) {
+      node(id: $pullRequestId) {
+        ... on PullRequest {
+          viewerCanEnableAutoMerge
+        }
+      }
+    }
+    ' -f pullRequestId="$pull_request_id" | jq -e '.data.node.viewerCanEnableAutoMerge' > /dev/null
+}
 # Ensures that the Continuous Integration is successful.
 if [ -x "$(which hub)" ]; then
   readonly CI_STATUS="$(hub ci-status "${BRANCH}")"
@@ -109,6 +126,10 @@ if [ -x "$(which hub)" ]; then
       echo "WARNING: forcing submission despite CI status \"${CI_STATUS}\"."
     else
       echo "Continuous integration is \"${CI_STATUS}\""
+      if ! is_auto_mergeable; then
+        GIT_SUBMIT_AUTO_MERGE=0
+      fi
+      # TODO(cyrille): Check if auto-merge is already enabled, to avoid asking the question.
       if [ -z "$GIT_SUBMIT_AUTO_MERGE" ]; then
         read -n1 -p "Do you want to enable auto-merge? [y/N]" answer
         echo "You can avoid this question by setting GIT_SUBMIT_AUTO_MERGE to 0 or 1 in your environment."
@@ -204,7 +225,7 @@ fi
 if [ -z "${NO_SQUASH_ON_GITHUB}" ]; then
 
   # Find pull-request ID.
-  readonly PULL_REQUEST_NUMBER="$(git checkout -q "$BRANCH" && hub pr show -f %I)"
+  readonly PULL_REQUEST_NUMBER="$(get_pull_request_number)"
   if [[ -z "${PULL_REQUEST_NUMBER}" ]]; then
     echo "Could not find the Pull Request number." 1>&2
     abort
