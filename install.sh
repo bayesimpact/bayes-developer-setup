@@ -104,7 +104,7 @@ export PATH="$PATH:$DIR/bin"
 add_to_shellrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" != *\":$DIR/man:\"* ]]; then export MANPATH=\"\$MANPATH:$DIR/man\"; fi"
 
 # Install autocompletions.
-if [ "$(uname)" == "Darwin" ] && [ -n "$(which brew)" ] && [ -x "$(which brew)" ] && (brew list | grep -q bash-completion); then
+if [ "$(uname)" == "Darwin" ] && [ -n "$(which brew)" ] && [ -x "$(which brew)" ] && (brew list | grep bash-completion > /dev/null); then
   AUTOCOMPLETE_PATH="$(brew --prefix)/etc/bash_completion.d"
 elif [ "$(uname)" == "Linux" ]; then
   AUTOCOMPLETE_PATH="/usr/share/bash-completion/completions/"
