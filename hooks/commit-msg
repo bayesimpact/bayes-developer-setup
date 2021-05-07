@@ -34,33 +34,21 @@ FLAGS=$(awk -v RS= '{paragraph=$0} END {print paragraph}' <<< "$BODY_AND_FLAGS")
 
 # Check whether the last paragraph of the body has flags (issue reference or commit variable).
 if grep -qP '^\w+\s*(=|#\d+)' <<< "$FLAGS"; then
-  ISSUE_REF="$(tail -n1 <<< "$FLAGS")"
-  # Check whether the last flag is an issue reference.
-  # TODO(cyrille): Check when there are both 'For' and 'Fix' references.
-  if [[ "$ISSUE_REF" =~ ^\w+\s*\#(\d+) ]]; then
-    # TODO(cyrille): Check multiple issue references.
-    readonly ISSUE_NUMBER="${BASH_REMATCH[0]}"
-    [[ $ISSUE_REF == "For #"$ISSUE_NUMBER ]] ||
-      [[ $ISSUE_REF == "Fix #"$ISSUE_NUMBER ]] ||
-      die 'Issue reference should either be introduced by "For" or "Fix".'
-    VARS="$(head -n -1 <<< "$FLAGS")"
-  else
-    VARS="$FLAGS"
-  fi
-  # Ensure there's no issue reference outside the last line of the flags.
-  grep -P '^\w+\s*#\d+' <<< "$VARS" &&
-    die 'Issue references should be on the last line of the message.'
-  # Ensure variables are uppercase.
-  grep -vP '^[A-Z]+\s*=' <<< "$VARS" &&
-    die 'Commit variables should be in uppercase.'
-  # Ensure variables are set without spacing.
-  grep -vP '^[A-Z]+=(\S|$)' <<< "$VARS" &&
+  # Ensure variables are uppercase and without spacing.
+  grep -P '^\w+\s*=' <<< "$FLAGS" | grep -vP '^[A-Z]+\s*=' &&
     die 'Commit variables assignment should be bash-like: "VAR=value".'
+  # Ensure the issue reference is well formated: "For #1234, #2345".
+  grep -P '^\w+\s*#\d+' <<< "$FLAGS" | grep -vP '^(For|Fix) #\d+(, #\d+)*$' &&
+    die 'Issue references should be introduced by either "For" or "Fix" and separated by ", ".'
 else
   FLAGS=""
 fi
 
 readonly BODY="$(head -n -"$(wc -l <<< "$FLAGS")" <<< "$BODY_AND_FLAGS")"
+# Ensure there are no variables or references in the body.
+grep -vP '^\w+\s*(=|#\d+)' <<< "$BODY" &&
+  die 'Commit variables and issue references should be in the last paragraph of the message.'
+# Ensure the body is no more than 72 chars wide.
 [[ $(wc -L <<< "$BODY") -lt $BODY_MAX_LENGTH ]] ||
   die 'Commit body should be no wider than '"$BODY_MAX_LENGTH"' chars.'
 
