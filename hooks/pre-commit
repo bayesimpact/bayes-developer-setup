@@ -1,0 +1,11 @@
+#!/bin/bash
+
+. "$(git --exec-path)/git-sh-setup"  # for die
+readonly CIRCLE_CI_CONFIG="$(git rev-parse --show-toplevel)/.circleci/config.yml"
+
+if [ -f "$CIRCLE_CI_CONFIG" ] && command -v circleci > /dev/null; then
+  # Validate the Circle CI config, if it changed.
+  git diff-index --quiet -p -M HEAD -- "$CIRCLE_CI_CONFIG" ||
+    circleci config validate "$CIRCLE_CI_CONFIG" > /dev/null ||
+    die "CircleCI config is not valid."
+fi
