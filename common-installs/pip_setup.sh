@@ -2,7 +2,7 @@
 #
 # Setting up pip packages.
 
-if ! pip --version | grep 'python 3'; then
+if ! pip --version | grep -q 'python 3'; then
     echo "Sorry, pip installs are only useful for python3 users."
     exit 1
 fi
