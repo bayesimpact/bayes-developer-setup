@@ -30,11 +30,11 @@ readonly PROPER_VAR_REGEX='^[A-Z]+=(\S|$)'
 
 
 # Ensure context format and length.
-grep -qP "$TOPIC_REGEX" <<< "$COMMIT_MSG_FILE" ||
+grep -qP "$TOPIC_REGEX" "$COMMIT_MSG_FILE" ||
   die 'Message should start with a bracketed topic of maximum length '"$CONTEXT_MAX_LENGTH"'. E.g. "[Clean Code]"'
 
 # Ensure subject format and length.
-readonly SUBJECT=$(head -n1 <<< "$COMMIT_MSG_FILE")
+readonly SUBJECT=$(head -n1 "$COMMIT_MSG_FILE")
 grep -qP "$SUBJECT_REGEX" <<< "$SUBJECT" ||
   die 'Commit message should be no more than '"$SUBJECT_MAX_LENGTH"`
   `' characters long, start with an uppercase letter and end with a period.
@@ -62,9 +62,14 @@ else
   FLAGS=""
 fi
 
-readonly BODY="$(head -n -"$(wc -l <<< "$FLAGS")" <<< "$BODY_AND_FLAGS")"
+if [ -z "$FLAGS" ]; then
+  readonly BODY="$BODY_AND_FLAGS"
+else
+  readonly BODY="$(head -n -"$(wc -l <<< "$FLAGS")" <<< "$BODY_AND_FLAGS")"
+fi
+
 # Ensure there are no variables or references in the body.
-grep -vP "$PROBABLE_FLAG_REGEX" <<< "$BODY" &&
+grep -P "$PROBABLE_FLAG_REGEX" <<< "$BODY" &&
   die 'Commit variables and issue references should be in the last paragraph of the message.'
 # Ensure the body is no more than 72 chars wide.
 [[ $(wc -L <<< "$BODY") -lt $BODY_MAX_LENGTH ]] ||
