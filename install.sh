@@ -127,13 +127,11 @@ if [ -z "$(which hub)" ] || [ "$(hub --version | grep hub\ version | sed -e "s/.
     HUB_PLATFORM="linux-amd64"
   fi
   if [ -n "${HUB_PLATFORM}" ]; then
-    if [ "${HUB_PLATFORM}" == "darwin-amd64" ]; then
-      curl -O -L "https://github.com/github/hub/releases/download/v${HUB_VERSION}/hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz"
-      tar -zxf "hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz" -C "${DIR}" --strip-components 1 "hub-${HUB_PLATFORM}-${HUB_VERSION}"/bin
-    else
-      wget "https://github.com/github/hub/releases/download/v${HUB_VERSION}/hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz" -O - | \
-        tar xz -C "${DIR}" --strip-components 1 "hub-${HUB_PLATFORM}-${HUB_VERSION}/bin" -C "${DIR}" --strip-components 1
-    fi
+    TEMP_TGZ="$(mktemp)"
+    curl -o "$TEMP_TGZ" -L "https://github.com/github/hub/releases/download/v${HUB_VERSION}/hub-${HUB_PLATFORM}-${HUB_VERSION}.tgz"
+    tar -zxf "$TEMP_TGZ" -C "${DIR}" --strip-components 1 "hub-${HUB_PLATFORM}-${HUB_VERSION}"/bin
+    tar -zxf "$TEMP_TGZ" -C "${DIR}" --strip-components 2 "hub-${HUB_PLATFORM}-${HUB_VERSION}"/share/man
+    rm "$TEMP_TGZ"
   else
     # There's no easy way to install a recent version of hub: we then create a
     # stub with instructions to install it.
