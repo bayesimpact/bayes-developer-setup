@@ -71,7 +71,7 @@ fi
 # Ensure there are no variables or references in the body.
 grep -P "$PROBABLE_FLAG_REGEX" <<< "$BODY" &&
   die 'Commit variables and issue references should be in the last paragraph of the message.'
-# Ensure the body is no more than 72 chars wide.
-[[ $(wc -L <<< "$BODY") -lt $BODY_MAX_LENGTH ]] ||
+# Ensure the body is no more than 72 chars wide, except for long URLs.
+[[ $(grep -vP 'https?://\S{50}' <<< "$BODY" | wc -L) -lt $BODY_MAX_LENGTH ]] ||
   die 'Commit body should be no wider than '"$BODY_MAX_LENGTH"' chars.'
 
