@@ -15,10 +15,21 @@
 #
 # Use as git rebase-last [--onto <base_branch>] <my_branch>
 #
-# Base branch default is master.
+# Base branch default is origin's head.
 # Default branch to rebase is HEAD.
 
-onto="master"
+# The name of the remote used for default distant branch, usually "origin".
+readonly BASE_REMOTE_MAIN="$(git config branch.main.remote)"
+readonly BASE_REMOTE_MASTER="$(git config branch.master.remote)"
+if [ "${BASE_REMOTE_MAIN}" != "" ]; then
+  readonly BASE_REMOTE=${BASE_REMOTE_MAIN}
+elif [ "${BASE_REMOTE_MASTER}" != "" ]; then
+  readonly BASE_REMOTE=${BASE_REMOTE_MASTER}
+else
+  readonly BASE_REMOTE="origin"
+fi
+
+onto="$BASE_REMOTE/HEAD"
 if [[ "$1" == "--onto" ]]; then
     onto="$2"
     shift
