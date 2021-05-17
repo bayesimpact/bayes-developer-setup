@@ -110,6 +110,7 @@ function get_pr_info {
             id
             number
             viewerCanEnableAutoMerge
+            autoMergeRequest {enabledAt}
           }
         }
       }
@@ -133,10 +134,12 @@ if [ -n "$CAN_USE_HUB" ]; then
     else
       echo "Continuous integration is \"${CI_STATUS}\""
       readonly PR_INFO="$(get_pr_info "$BRANCH_MERGE")"
-      if ! jq -e '.viewerCanEnableAutoMerge' <<< "$PR_INFO" > /dev/null; then
+      if jq -e '.autoMergeRequest.enabledAt' <<< "$PR_INFO" > /dev/null; then
+          readonly AUTO_MERGE_ENABLED=1
+          GIT_SUBMIT_AUTO_MERGE=1
+      elif ! jq -e '.viewerCanEnableAutoMerge' <<< "$PR_INFO" > /dev/null; then
         GIT_SUBMIT_AUTO_MERGE=0
       fi
-      # TODO(cyrille): Check if auto-merge is already enabled, to avoid asking the question.
       if [ -z "$GIT_SUBMIT_AUTO_MERGE" ]; then
         read -n1 -p "Do you want to enable auto-merge? [y/N]" answer
         echo ''
@@ -226,7 +229,9 @@ if [ -z "${BRANCH_REMOTE}" ]; then
   exit 5
 fi
 
-if [ -z "${NO_SQUASH_ON_GITHUB}" ] && [ -n "$CAN_USE_HUB" ] ; then
+if [ -n "$AUTO_MERGE_ENABLED" ]; then
+  echo "GitHub will auto-merge this pull-request once CI is successful."
+elif [ -z "${NO_SQUASH_ON_GITHUB}" ] && [ -n "$CAN_USE_HUB" ]; then
 
   # Ask GitHub to do the squash and merge!
   if [[ "$GIT_SUBMIT_AUTO_MERGE" == "1" ]]; then
