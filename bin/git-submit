@@ -65,13 +65,12 @@ readonly START_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
 # Ask Github to merge this PR once CI is successful.
 function enable_auto_merge {
-  local pull_request_id="$(hub api repos/{owner}/{repo}/pulls/$1 | jq -r .node_id)"
   hub api graphql -f query='
     mutation AutoMerge($pullRequestId: ID!) {
       enablePullRequestAutoMerge(input: {pullRequestId: $pullRequestId, mergeMethod: SQUASH}) {
         pullRequest {autoMergeRequest {enabledAt}}
       }
-    }' -f pullRequestId="$pull_request_id" |
+    }' -f pullRequestId="$1" |
     jq -e '.data.enablePullRequestAutoMerge.pullRequest.autoMergeRequest.enabledAt' > /dev/null
 }
 
@@ -102,19 +101,33 @@ function get_pull_request_number {
   git checkout -q "$BRANCH" && (hub pr show -f %I; git checkout -q -)
 }
 
-function is_auto_mergeable {
-  # TODO(cyrille): Factorize with the actual auto_merge enabling.
-  local pull_request_id="$(hub api repos/{owner}/{repo}/pulls/$(get_pull_request_number) | jq -r .node_id)"
-  hub api graphql -f query='
-    query IsAutoMergeable($pullRequestId: ID!) {
-      node(id: $pullRequestId) {
-        ... on PullRequest {
-          viewerCanEnableAutoMerge
+function get_pr_info {
+  hub api graphql -F query='
+    query IsAutoMergeable($headRefName: String!) {
+      repository(name: "{repo}", owner: "{owner}") {
+        pullRequests(last: 1, headRefName: $headRefName, states: [OPEN]) {
+          nodes {
+            id
+            number
+            viewerCanEnableAutoMerge
+          }
         }
       }
-    }
-    ' -f pullRequestId="$pull_request_id" | jq -e '.data.node.viewerCanEnableAutoMerge' > /dev/null
+    }' -F headRefName="$1" |
+    jq '.data.repository.pullRequests.nodes[0]'
 }
+
+# The full name of the remote default branch, usually "origin/default_branch".
+readonly BASE_BRANCH="${BASE_REMOTE}/${DEFAULT_REMOTE_BRANCH}"
+# Git hash of the latest status of remote default branch.
+readonly BASE_DEFAULT="$(git rev-parse "${BASE_BRANCH}")"
+# Git hash of the current branch to submit.
+readonly BRANCH_INITIAL="$(git rev-parse "${BRANCH}")"
+# The name of the remote tracked by this branch, usually "origin".
+readonly BRANCH_REMOTE="$(git config "branch.${BRANCH}.remote")"
+# The name of the remote branch tracked by this one.
+readonly BRANCH_MERGE="$(git config "branch.${BRANCH}.merge" | sed -e s/^refs\\/heads\\///)"
+
 # Ensures that the Continuous Integration is successful.
 if [ -n "$CAN_USE_HUB" ]; then
   readonly CI_STATUS="$(hub ci-status "${BRANCH}")"
@@ -123,7 +136,8 @@ if [ -n "$CAN_USE_HUB" ]; then
       echo "WARNING: forcing submission despite CI status \"${CI_STATUS}\"."
     else
       echo "Continuous integration is \"${CI_STATUS}\""
-      if ! is_auto_mergeable; then
+      readonly PR_INFO="$(get_pr_info "$BRANCH_MERGE")"
+      if ! jq -e '.viewerCanEnableAutoMerge' <<< "$PR_INFO" > /dev/null; then
         GIT_SUBMIT_AUTO_MERGE=0
       fi
       # TODO(cyrille): Check if auto-merge is already enabled, to avoid asking the question.
@@ -148,17 +162,6 @@ fi
 
 # Get latest code from remote.
 git fetch
-
-# The full name of the remote default branch, usually "origin/default_branch".
-readonly BASE_BRANCH="${BASE_REMOTE}/${DEFAULT_REMOTE_BRANCH}"
-# Git hash of the latest status of remote default branch.
-readonly BASE_DEFAULT="$(git rev-parse "${BASE_BRANCH}")"
-# Git hash of the current branch to submit.
-readonly BRANCH_INITIAL="$(git rev-parse "${BRANCH}")"
-# The name of the remote tracked by this branch, usually "origin".
-readonly BRANCH_REMOTE="$(git config "branch.${BRANCH}.remote")"
-# The name of the remote branch tracked by this one.
-readonly BRANCH_MERGE="$(git config "branch.${BRANCH}.merge" | sed -e s/^refs\\/heads\\///)"
 
 # Abort all changes and restore initial state before exiting.
 function abort {
@@ -224,16 +227,10 @@ fi
 
 if [ -z "${NO_SQUASH_ON_GITHUB}" ] && [ -n "$CAN_USE_HUB" ] ; then
 
-  # Find pull-request ID.
-  readonly PULL_REQUEST_NUMBER="$(get_pull_request_number)"
-  if [[ -z "${PULL_REQUEST_NUMBER}" ]]; then
-    echo "Could not find the Pull Request number." 1>&2
-    abort
-  fi
-
   # Ask GitHub to do the squash and merge!
   if [[ "$GIT_SUBMIT_AUTO_MERGE" == "1" ]]; then
-    if enable_auto_merge "$PULL_REQUEST_NUMBER" ; then
+    readonly PULL_REQUEST_NODE_ID="$(jq -r '.id' <<< "$PR_INFO")"
+    if [ -n "$PULL_REQUEST_NODE_ID" ] && enable_auto_merge "$PULL_REQUEST_NODE_ID" ; then
       echo "Your branch will be merged once CI is successful."
     else
       echo "Something went wrong while auto-merging your PR."
@@ -241,6 +238,13 @@ if [ -z "${NO_SQUASH_ON_GITHUB}" ] && [ -n "$CAN_USE_HUB" ] ; then
       abort
     fi
   else
+    # Find pull-request ID.
+    readonly PULL_REQUEST_NUMBER="$(jq -r '.number' <<< "$PR_INFO")"
+    if [[ -z "${PULL_REQUEST_NUMBER}" ]]; then
+      echo "Could not find the Pull Request number." 1>&2
+      abort
+    fi
+
     hub api -X PUT "/repos/{owner}/{repo}/pulls/${PULL_REQUEST_NUMBER}/merge" \
       -F merge_method=squash -F "sha=$BRANCH_INITIAL" | jq -r '.message' || abort
   fi
