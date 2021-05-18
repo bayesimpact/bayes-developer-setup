@@ -1,21 +1,21 @@
-Given(/^I commit anything with message:$/) do |content|
-  step %(I run `commit-msg "#{content}"`)
+Given(/^I use the defined hooks$/) do
+  step %(I successfully run `git config --global core.hooksPath /usr/share/hooks`)
 end
 
-Given(/^I should have an error about "([^"]+)"$/) do |error|
-  
-end
-
-Given(/^a dummy git repo in "([^"]+)" whose default branch is "([^"]+)"$/) do |dir_name, branch|
+Given(/^I am in a dummy git repo in "([^"]+)"$/) do |dir_name|
   step %(a directory named "#{dir_name}")
-  cd(dir_name) {
-    step %(I successfully run `git init --quiet`)
-    step %(I commit a file "dummy" with:), %(dummy content)
-    step %(I successfully run `git branch -m #{branch} --quiet`)
-    # Hop in detached mode so that the branches can be updated.
-    step %(I successfully run `git checkout --detach #{branch} --quiet`)
-  }
+  step %(I cd to "#{dir_name}")
+  step %(I successfully run `git init --quiet`)
+  step %(I force commit a file "dummy" with message:), %(No message)
+  step %(I run `git branch -m main`)
 end
+
+Given(/^I (force )?commit a file "([^"]+)" with message:$/) do |force, file_name, content|
+  step %(a file named "#{file_name}" with:), %(dummy content)
+  step %(I run `git add "#{file_name}"`)
+  step %(I #{force ? 'successfully ' : ''}run `git commit -#{force ? 'n' : ''}m "#{content}"`)
+end
+
 
 Given(/^I am in a "([^"]+)" git repo cloned from "([^"]+)"$/) do |dir_name, cloned_dir|
   step %(I successfully run `git clone "#{cloned_dir}/.git" "#{dir_name}" --quiet`)
@@ -26,41 +26,18 @@ Given(/^I create a "([^"]+)" git branch from "([^"]+)"$/) do |branch_name, origi
   step %(I successfully run `git checkout -b "#{branch_name}" "#{origin_branch}"`)
 end
 
-Given(/^I commit a file "([^"]+)" with:$/) do |file_name, content|
-  step %(a file named "#{file_name}" with:), content
-  step %(I successfully run `git add "#{file_name}"`)
-  step %(I successfully run `git commit -m "No message"`)
+Given(/^I should be on "([^"]+)" git branch$/) do |name|
+  cd('.') {
+    branch = `git rev-parse --abbrev-ref HEAD`.chomp
+    expect(branch).to eql(name)
+  }
 end
 
-Given(/^a file "([^"]+)" is committed on "([^"]+)" git branch in "([^"]+)" with:$/) do |file_name, branch, repo, content|
-  cd("../#{repo}") {
-    sha1 = git_hash('HEAD', '.')
-    step %(I successfully run `git checkout #{branch} --quiet`)
-    step %(I commit a file "#{file_name}" with:), content
-    step %(I successfully run `git checkout --detach #{sha1} --quiet`)
+Given(/^the git status should be clean$/) do
+  cd('.') {
+    diff = `git diff HEAD --shortstat 2> /dev/null | tail -n1`.chomp
+    expect(diff).to eql('')
   }
 end
 
 
-Given(/^the "([^"]+)" git branch (?:in "([^"]+)" )?should(?: still)?( not)? exist$/) do |name, repo, not_exist|
-  dir = '.'
-  if repo
-    dir = "../#{repo}"
-  end
-  sha1 = git_hash(name, dir)
-  if not_exist
-    expect(sha1).to be_empty
-  else
-    expect(sha1).not_to be_empty
-  end
-end
-
-Given(/^the "([^"]+)" git branch should be in sync with "([^"]+)" in "([^"]+)"$/) do |name, other_branch, repo|
-  dir = '.'
-  if repo
-    dir = "../#{repo}"
-  end
-  sha1 = git_hash(name)
-  other_sha1 = git_hash(other_branch, dir)
-  expect(sha1).to eql(other_sha1)
-end

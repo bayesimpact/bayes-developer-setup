@@ -10,7 +10,7 @@ jobs:
           name: Run tests
           command: |
             # Run docker services without volumes.
-            docker-compose build --pull test test-reviewable
+            docker-compose build --pull test test-reviewable test-hooks
 
 workflows:
   version: 2

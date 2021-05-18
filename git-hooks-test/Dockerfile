@@ -4,6 +4,6 @@ FROM lascap/aruba-test
 RUN apt-get update -qq && apt-get install -qqy git
 
 # "Install" hooks.
-ADD hooks /usr/bin
+ADD hooks /usr/share/hooks
 COPY git-hooks-test /test
 RUN cucumber
