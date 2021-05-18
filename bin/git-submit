@@ -14,6 +14,8 @@
 # To install it, copy it or link it from /usr/local/bin/git-submit and gzip the
 # manpage to /usr/local/man/man1.
 
+source "$(dirname $0)/echo_with_colors.sh"
+
 # Find the branch to submit.
 if [ "$1" == "-f" ] || [ "$1" == "--force" ]; then
   BRANCH="$2"
@@ -77,7 +79,7 @@ function enable_auto_merge {
 if [ -z "${BRANCH}" ]; then
   BRANCH="$START_BRANCH"
   if [ "${BRANCH}" == "${DEFAULT_BRANCH}" ]; then
-    echo "branch required:" 1>&2
+    echo_error "branch required:"
     git branch | grep -v \ $DEFAULT_BRANCH$ 1>&2
     exit 1
   fi
@@ -88,18 +90,14 @@ readonly NO_SQUASH_ON_GITHUB="${NO_GIT_SUBMIT_EXPERIMENTAL}"
 
 # Ensures that current dir is clean.
 if [ -n "$(git diff HEAD --shortstat 2> /dev/null | tail -n1)" ]; then
-  echo "Current git status is dirty. Commit, stash or revert your changes before submitting." 1>&2
+  echo_error "Current git status is dirty. Commit, stash or revert your changes before submitting."
   exit 2
 fi
 
 if ! git rev-parse --verify "${BRANCH}" 2>&1 > /dev/null; then
-  echo "${BRANCH} is not a valid branch." 1>&2
+  echo_error "${BRANCH} is not a valid branch."
   exit 8
 fi
-
-function get_pull_request_number {
-  git checkout -q "$BRANCH" && (hub pr show -f %I; git checkout -q -)
-}
 
 function get_pr_info {
   local repo_info="$(hub api graphql -F query='
@@ -121,9 +119,9 @@ function get_pr_info {
     .viewerCanEnableAutoMerge or
     .pullRequests.nodes[0].autoMergeRequest.enabledAt
   ))' <<< "$repo_info" > /dev/null; then
-    echo "WARNING: The remote branch won't be deleted after submit." >&2
-    echo "Please take the time to set the option in the repository" >&2
-    echo "$(hub browse -u -- settings#merge_types_delete_branch)" >&2
+    echo_warning "WARNING: The remote branch won't be deleted after submit."
+    echo_info "Please take the time to set the option in the repository"
+    echo_info "$(hub browse -u -- settings#merge_types_delete_branch)"
   fi
   jq '.pullRequests.nodes[0]' <<< "$repo_info"
 }
@@ -140,9 +138,9 @@ if [ -n "$CAN_USE_HUB" ]; then
   readonly CI_STATUS="$(hub ci-status "${BRANCH}")"
   if [ "${CI_STATUS}" != "success" ]; then
     if [ "${FORCE_SUBMIT}" == "-f" ] || [ "${FORCE_SUBMIT}" == "--force" ]; then
-      echo "WARNING: forcing submission despite CI status \"${CI_STATUS}\"."
+      echo_warning "WARNING: forcing submission despite CI status \"${CI_STATUS}\"."
     else
-      echo "Continuous integration is \"${CI_STATUS}\""
+      echo_info "Continuous integration is \"${CI_STATUS}\""
       readonly PR_INFO="$(get_pr_info "$BRANCH_MERGE")"
       if jq -e '.autoMergeRequest.enabledAt' <<< "$PR_INFO" > /dev/null; then
           readonly AUTO_MERGE_ENABLED=1
@@ -153,13 +151,13 @@ if [ -n "$CAN_USE_HUB" ]; then
       if [ -z "$GIT_SUBMIT_AUTO_MERGE" ]; then
         read -n1 -p "Do you want to enable auto-merge? [y/N]" answer
         echo ''
-        echo "You can avoid this question by setting GIT_SUBMIT_AUTO_MERGE to 0 or 1 in your environment."
+        echo_info "You can avoid this question by setting GIT_SUBMIT_AUTO_MERGE to 0 or 1 in your environment."
         if [ "${answer}" == "y" ] || [ "${answer}" == "Y" ]; then
           GIT_SUBMIT_AUTO_MERGE=1
         fi
       fi
       if [[ "$GIT_SUBMIT_AUTO_MERGE" != "1" ]]; then
-        echo 'Use "-f" if you want to force submission.'
+        echo_info 'Use "-f" if you want to force submission.'
         hub ci-status -v "${BRANCH}"
         exit 11
       fi
@@ -179,18 +177,18 @@ readonly BRANCH_INITIAL="$(git rev-parse "${BRANCH}")"
 
 # Abort all changes and restore initial state before exiting.
 function abort {
-  echo "Something went wrong, aborting:" 1>&2
+  echo_error "Something went wrong, aborting:"
 
-  echo "  Set default branch to ${BASE_DEFAULT}." 1>&2
+  echo_info "  Set default branch to ${BASE_DEFAULT}."
   git checkout -f "${DEFAULT_BRANCH}"
   git reset --hard "${BASE_DEFAULT}"
 
-  echo "  Set branch ${BRANCH} to ${BRANCH_INITIAL}." 1>&2
+  echo_info "  Set branch ${BRANCH} to ${BRANCH_INITIAL}."
   git checkout -f "${BRANCH}"
   git reset --hard "${BRANCH_INITIAL}"
 
   if [[ "$START_BRANCH" != "$BRANCH" ]]; then
-    echo "  Going back to branch ${START_BRANCH}."
+    echo_info "  Going back to branch ${START_BRANCH}."
     git checkout -f "$START_BRANCH"
   fi
 
@@ -200,7 +198,7 @@ function abort {
 # Check that the changes are bundled as one commit on top of origin/default_branch.
 while [ "${BASE_DEFAULT}" != "$(git rev-parse "${BRANCH}^")" ]; do
   if [ "${BASE_DEFAULT}" == "$(git rev-parse "${BRANCH}")" ]; then
-    echo "No changes to submit."
+    echo_error "No changes to submit."
     exit 3
   fi
   if ( git merge-base --is-ancestor "$(git rev-parse "${BRANCH}^")" "${BASE_DEFAULT}" ); then
@@ -211,8 +209,8 @@ while [ "${BASE_DEFAULT}" != "$(git rev-parse "${BRANCH}^")" ]; do
     fi
     break
   else
-    echo "You should first group all your changes in one commit:" 1>&2
-    echo "  git rebase -i ${BASE_BRANCH} ${BRANCH}" 1>&2
+    echo_warning "You should first group all your changes in one commit:"
+    echo_warning "  git rebase -i ${BASE_BRANCH} ${BRANCH}"
     if [[ -z "${NO_SQUASH_ON_GITHUB}" ]]; then
       exit 12
     fi
@@ -230,8 +228,8 @@ done
 
 # Check that the branch is tracking a remote branch.
 if [ -z "${BRANCH_REMOTE}" ]; then
-  echo "The branch ${BRANCH} is not tracked and has probably never been reviewed." 1>&2
-  echo "  git push -u ${BASE_REMOTE} ${BRANCH}"
+  echo_warning "The branch ${BRANCH} is not tracked and has probably never been reviewed."
+  echo_warning "  git push -u ${BASE_REMOTE} ${BRANCH}"
   read -p "Push now? [y/N]" answer
   if [ "${answer}" == "y" ] || [ "${answer}" == "Y" ]; then
     git push -u ${BASE_REMOTE} ${BRANCH} || abort
@@ -240,24 +238,24 @@ if [ -z "${BRANCH_REMOTE}" ]; then
 fi
 
 if [ -n "$AUTO_MERGE_ENABLED" ]; then
-  echo "GitHub will auto-merge this pull-request once CI is successful."
+  echo_info "GitHub will auto-merge this pull-request once CI is successful."
 elif [ -z "${NO_SQUASH_ON_GITHUB}" ] && [ -n "$CAN_USE_HUB" ]; then
 
   # Ask GitHub to do the squash and merge!
   if [[ "$GIT_SUBMIT_AUTO_MERGE" == "1" ]]; then
     readonly PULL_REQUEST_NODE_ID="$(jq -r '.id' <<< "$PR_INFO")"
     if [ -n "$PULL_REQUEST_NODE_ID" ] && enable_auto_merge "$PULL_REQUEST_NODE_ID" ; then
-      echo "Your branch will be merged once CI is successful."
+      echo_info "Your branch will be merged once CI is successful."
     else
-      echo "Something went wrong while auto-merging your PR."
-      echo "Maybe the CI turned to green, please try again."
+      echo_error "Something went wrong while auto-merging your PR."
+      echo_error "Maybe the CI turned to green, please try again."
       abort
     fi
   else
     # Find pull-request ID.
     readonly PULL_REQUEST_NUMBER="$(jq -r '.number' <<< "$PR_INFO")"
     if [[ -z "${PULL_REQUEST_NUMBER}" ]]; then
-      echo "Could not find the Pull Request number." 1>&2
+      echo_error "Could not find the Pull Request number."
       abort
     fi
 
@@ -271,8 +269,8 @@ elif [ -z "${NO_SQUASH_ON_GITHUB}" ] && [ -n "$CAN_USE_HUB" ]; then
 else
   # Check that the remote branch is synced with the local one.
   if [ "$(git rev-parse "${BRANCH_REMOTE}/${BRANCH_MERGE}")" != "$(git rev-parse "${BRANCH}")" ]; then
-    echo "Push your branch on ${BRANCH_REMOTE}, or you'll have a hard time removing the pull request:" 1>&2
-    echo "  git push -f ${BRANCH_REMOTE} ${BRANCH}:${BRANCH_MERGE}"
+    echo_warning "Push your branch on ${BRANCH_REMOTE}, or you'll have a hard time removing the pull request:"
+    echo_warning "  git push -f ${BRANCH_REMOTE} ${BRANCH}:${BRANCH_MERGE}"
     git push -f "${BRANCH_REMOTE}" "${BRANCH}:${BRANCH_MERGE}" || abort
   fi
 
