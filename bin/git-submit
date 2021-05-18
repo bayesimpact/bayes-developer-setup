@@ -121,9 +121,9 @@ function get_pr_info {
     .viewerCanEnableAutoMerge or
     .pullRequests.nodes[0].autoMergeRequest.enabledAt
   ))' <<< "$repo_info" > /dev/null; then
-    echo "WARNING: The remote branch won't be deleted after submit."
-    echo "Please take the time to set the option in the repository"
-    echo "$(hub browse -u -- settings#merge_types_delete_branch)"
+    echo "WARNING: The remote branch won't be deleted after submit." >&2
+    echo "Please take the time to set the option in the repository" >&2
+    echo "$(hub browse -u -- settings#merge_types_delete_branch)" >&2
   fi
   jq '.pullRequests.nodes[0]' <<< "$repo_info"
 }
