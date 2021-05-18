@@ -102,9 +102,10 @@ function get_pull_request_number {
 }
 
 function get_pr_info {
-  hub api graphql -F query='
+  local repo_info="$(hub api graphql -F query='
     query IsAutoMergeable($headRefName: String!) {
       repository(name: "{repo}", owner: "{owner}") {
+        deleteBranchOnMerge
         pullRequests(last: 1, headRefName: $headRefName, states: [OPEN]) {
           nodes {
             id
@@ -115,7 +116,17 @@ function get_pr_info {
         }
       }
     }' -F headRefName="$1" |
-    jq '.data.repository.pullRequests.nodes[0]'
+    jq '.data.repository')"
+  if ! jq -e '.deleteBranchOnMerge and (.pullRequests.nodes[0] | (
+    .viewerCanEnableAutoMerge or
+    .pullRequests.nodes[0].autoMergeRequest.enabledAt
+  ))' <<< "$repo_info" > /dev/null; then
+    echo "WARNING: The remote branch won't be deleted after submit."
+    echo "Please take the time to set the option in the repository"
+    echo "$(hub browse -u -- settings#merge_types_delete_branch)"
+  fi
+  jq '.pullRequests.nodes[0]' <<< "$repo_info"
+  exit
 }
 
 # The full name of the remote default branch, usually "origin/default_branch".
