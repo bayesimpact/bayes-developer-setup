@@ -138,12 +138,12 @@ readonly BRANCH_MERGE="$(git config "branch.${BRANCH}.merge" | sed -e s/^refs\\/
 # Ensures that the Continuous Integration is successful.
 if [ -n "$CAN_USE_HUB" ]; then
   readonly CI_STATUS="$(hub ci-status "${BRANCH}")"
+  readonly PR_INFO="$(get_pr_info "$BRANCH_MERGE")"
   if [ "${CI_STATUS}" != "success" ]; then
     if [ "${FORCE_SUBMIT}" == "-f" ] || [ "${FORCE_SUBMIT}" == "--force" ]; then
       echo "WARNING: forcing submission despite CI status \"${CI_STATUS}\"."
     else
       echo "Continuous integration is \"${CI_STATUS}\""
-      readonly PR_INFO="$(get_pr_info "$BRANCH_MERGE")"
       if jq -e '.autoMergeRequest.enabledAt' <<< "$PR_INFO" > /dev/null; then
           readonly AUTO_MERGE_ENABLED=1
           GIT_SUBMIT_AUTO_MERGE=1
