@@ -7,12 +7,12 @@
 . "$(git --exec-path)/git-sh-setup"  # for die
 readonly COMMIT_MSG="$(grep -v ^# "$1")"
 
-readonly CONTEXT_MAX_LENGTH=15
+readonly TOPIC_MAX_LENGTH=15
 readonly SUBJECT_MAX_LENGTH=59
 readonly BODY_MAX_LENGTH=72
 
-# A commit topic. Matches "[Short Topic]" but not "[Uselessly Very Long Topic]"
-readonly TOPIC_REGEX='^\[[^\]]{2,'"$CONTEXT_MAX_LENGTH"'}\]'
+# A commit topic with title case. Matches "[Short Topic]" but not "[short topic]"
+readonly TOPIC_REGEX='^\[[A-Z][\w-]*( [A-Z][\w-]*)*\]'
 # A commit subject. Matches "] This is the commit subject." (with set maximum length)
 # TODO(cyrille): Make sure the first char is an uppercase letter.
 readonly SUBJECT_REGEX='(?<=\] ).{2,'"$SUBJECT_MAX_LENGTH"'}\.$'
@@ -31,7 +31,10 @@ readonly PROPER_VAR_REGEX='^[A-Z]+=(\S|$)'
 
 # Ensure context format and length.
 grep -qP "$TOPIC_REGEX" <<< "$COMMIT_MSG" ||
-  die 'Message should start with a bracketed topic of maximum length '"$CONTEXT_MAX_LENGTH"'. E.g. "[Clean Code]"'
+  die 'Message should start with a bracketed title-cased topic. E.g. "[Title Case]"'
+(( BRACKET_LENGTH = 2 + TOPIC_MAX_LENGTH ))
+[[ $(grep -P '.*?\]' | wc -c) -lt $BRACKET_LENGTH ]] ||
+  die 'Message topic '"$(head -n1 <<< "$COMMIT_MSG")"' should be at most '"$TOPIC_MAX_LENGTH"' characters long.'
 
 # Ensure subject format and length.
 readonly SUBJECT=$(head -n1 <<< "$COMMIT_MSG")
