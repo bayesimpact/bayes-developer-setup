@@ -1,0 +1,24 @@
+.TH GIT-REVIEW 1 "18 May 2021" "1.0" "Git Manual"
+.SH NAME
+git-review \- prepare a review for the current branch
+.SH SYNOPSIS
+\fIgit review\fR [-f] [-s] [-u USER] [REVIEWERS]
+.SH DESCRIPTION
+git-review pushes the current branch to the remote repository, naming the remote branch with a user-specific prefix, and creates a pull/merge request (depending whether on GitHub or GitLab) with the specified reviewers (if any).
+.SH OPTIONS
+.TP
+REVIEWERS
+Set the reviewers for the created pull/merge request. Given as a comma-separated list of GitHub/GitLab handles. Ex: "zozoens31,pcorpet"
+.TP
+.BR \-f ", " \-\-force\fR
+Forces the push, overwriting any pre-existing remote branch with the prefixed name.
+Also doesn't create the pull/merge request.
+.TP
+.BR \-u ", " \-\-user = USER\fR
+Set the prefix for the remote branch to USER. Default is username from the git user's email (such as in username@example.com)
+.SH SEE ALSO
+\fBgit-merge\fR(1), \fBgit-commit\fR(1), \fBgit-push\fR(1), \fBgit-submit\fR(1)
+.SH AUTHOR
+Pascal Corpet (pascal@bayesimpact.org)
+.SH GIT
+Extends the \fBgit\fR(1) suite
