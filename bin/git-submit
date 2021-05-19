@@ -115,11 +115,11 @@ function get_pr_info {
       }
     }' -F headRefName="$1" |
     jq '.data.repository')"
-  if ! jq -e '.deleteBranchOnMerge and (.pullRequests.nodes[0] | (
+  if jq -e '(.deleteBranchOnMerge|not) and (.pullRequests.nodes[0] | (
     .viewerCanEnableAutoMerge or
-    .pullRequests.nodes[0].autoMergeRequest.enabledAt
+    .autoMergeRequest.enabledAt
   ))' <<< "$repo_info" > /dev/null; then
-    echo_warning "WARNING: The remote branch won't be deleted after submit."
+    echo_warning "WARNING: The remote branch won't be deleted after auto-merge."
     echo_info "Please take the time to set the option in the repository"
     echo_info "$(hub browse -u -- settings#merge_types_delete_branch)"
   fi
