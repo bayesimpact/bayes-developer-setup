@@ -14,6 +14,10 @@ Set the reviewers for the created pull/merge request. Given as a comma-separated
 Forces the push, overwriting any pre-existing remote branch with the prefixed name.
 Also doesn't create the pull/merge request.
 .TP
+.BR \-s ", " \-\-submit\fR
+Ask GitHub to auto-merge the branch, when all conditions are satisfied.
+Runs 'git submit'
+.TP
 .BR \-u ", " \-\-user = USER\fR
 Set the prefix for the remote branch to USER. Default is username from the git user's email (such as in username@example.com)
 .SH SEE ALSO

@@ -16,6 +16,10 @@ case $key in
     shift # past argument
     shift # past value
     ;;
+    -s|--submit)
+    readonly AUTO_SUBMIT="$1"
+    shift # past argument
+    ;;
     *)
     POSITIONAL+=("$1") # save it in an array for later
     shift # past argument
@@ -142,6 +146,10 @@ if [ -z "${FORCE_PUSH}" ]; then
     hub pull-request -F "${MESSAGE_FILE}" -a "${REVIEWER}" -r "${REVIEWER}" -h "${REMOTE_BRANCH}" -b "$REMOTE_BASE_BRANCH" | \
       sed -e "s/github.com/reviewable.io\/reviews/;s/pull\///"
   fi
+fi
+
+if [ -n "$AUTO_SUBMIT" ]; then
+  git submit
 fi
 
 rm "${MESSAGE_FILE}"
