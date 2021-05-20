@@ -16,14 +16,26 @@
 
 source "$(dirname $0)/echo_with_colors.sh"
 
-# Find the branch to submit.
-if [ "$1" == "-f" ] || [ "$1" == "--force" ]; then
-  BRANCH="$2"
-  FORCE_SUBMIT="$1"
-else
-  BRANCH="$1"
-  FORCE_SUBMIT="$2"
-fi
+# Parse the command line arguments.
+POSITIONAL=()
+while [[ $# -gt 0 ]]
+do
+key="$1"
+
+case $key in
+    -f|--force)
+    # TODO(cyrille): Clean checks on FORCE_SUBMIT, now that they cannot be anything else.
+    readonly FORCE_SUBMIT="$1"
+    shift # past argument
+    ;;
+    *)
+    POSITIONAL+=("$1") # save it in an array for later
+    shift # past value
+    ;;
+esac
+done
+set -- "${POSITIONAL[@]}" # restore positional parameters
+BRANCH="$1"
 
 # The name of the remote used for default distant branch, usually "origin".
 readonly BASE_REMOTE_MAIN="$(git config branch.main.remote)"
