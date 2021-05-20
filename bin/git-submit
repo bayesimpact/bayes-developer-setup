@@ -120,8 +120,13 @@ function get_pr_info {
     .autoMergeRequest.enabledAt
   ))' <<< "$repo_info" > /dev/null; then
     echo_warning "WARNING: The remote branch won't be deleted after auto-merge."
-    echo_info "Please take the time to set the option in the repository"
-    echo_info "$(hub browse -u -- settings#merge_types_delete_branch)"
+    read -t5 -n1 -p "Do you want to update your repository's settings? [y/N]" answer
+    if [[ $answer == [yY] ]]; then
+      hub api "repos/{owner}/{repo}" -X PATCH -F delete_branch_on_merge=true
+    else
+      echo_info "You can still do it from the console:"
+      echo_info "$(hub browse -u -- settings#merge_types_delete_branch)"
+    fi
   fi
   jq '.pullRequests.nodes[0]' <<< "$repo_info"
 }
