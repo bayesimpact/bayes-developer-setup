@@ -6,7 +6,16 @@ git-submit \- submit the given or the current branch
 .SH DESCRIPTION
 git-submit rebases a branch on top of master before pushing master to the tracked remote. It does the equivalent of a merge of a pull request on GitHub but by rebasing so keeping a clean history.
 .SH OPTIONS
-git-submit does not take any options. However, you can supply the branch to submit if it is not the current one.
+.TP
+.BR \-a ", " \-\-abort\fR
+Cancel any auto-submission (soon to come).
+Also recreate a branch from origin , without its username prefix.
+.TP
+.BR \-f ", " \-\-force\fR
+Forces the submit, disregarding the CI status.
+.TP
+.BR \-u ", " \-\-user = USER\fR
+Set the prefix for the remote branch to USER. Default is username from the git user's email (such as in username@example.com). Only useful for \fB--abort\fR
 .SH SEE ALSO
 \fBgit-merge\fR(1), \fBgit-commit\fR(1), \fBgit-push\fR(1)
 .SH AUTHOR
