@@ -2,9 +2,74 @@
 #
 # bash completion support for git-submit
 
+
+
+readonly ALL_OPTIONS=" -a --abort -f --force -u --user "
+
+__git_submit_options() {
+    declare -g _GIT_SUBMIT_FORCE _GIT_SUBMIT_USER_OPT _GIT_SUBMIT_USER _GIT_SUBMIT_ABORT
+
+    # Parse the command line arguments.
+    while [[ $# -gt 0 ]]; do
+      key="$1"
+
+      case $key in
+        -f|--force)
+        _GIT_SUBMIT_FORCE="$1"
+        shift # past argument
+        ;;
+        -u|--user)
+        _GIT_SUBMIT_USER_OPT="$1"
+        _GIT_SUBMIT_USER="$2"
+        shift # past argument
+        shift # past value
+        ;;
+        -a|--abort)
+        _GIT_SUBMIT_ABORT="$1"
+        shift # past argument
+        ;;
+        *)
+        shift # ignore value
+        ;;
+      esac
+    done
+    # Keep in sync with git-submit.
+    if [ -z "$_GIT_SUBMIT_USER" ] && [ -n "$_GIT_SUBMIT_ABORT" ]; then
+      _GIT_SUBMIT_USER=$(git config user.email | sed -e "s/@.*$//")
+    fi
+}
 _git_submit()
 {
-  __gitcomp "$(__git_heads)"
+  __git_submit_options "${COMP_WORDS[@]}"
+
+  local cur=${COMP_WORDS[COMP_CWORD]}
+  if [[ $cur == -* ]]; then
+    local available_options=""
+    if [ -z "$_GIT_SUBMIT_USER_OPT" ]; then
+      available_options="${available_options} -u --user "
+    fi
+    if [ -z "$_GIT_SUBMIT_ABORT" ]; then
+      available_options="${available_options} -a --abort "
+    fi
+    if [ -z "$_GIT_SUBMIT_FORCE" ]; then
+      available_options="${available_options} -f --force "
+    fi
+    if [[ ${#COMPREPLY[@]} == 0 ]] && [[ "$ALL_OPTIONS" == *" $cur "* ]]; then
+      COMPREPLY=("$cur ")
+    else
+      COMPREPLY=( $(compgen -W "$available_options" -- "$cur") )
+    fi
+    return
+  fi
+  local available_branches="$(__git_heads | grep -vE '^ma(ster|in)$')"
+  if [ -n "$_GIT_SUBMIT_ABORT" ]; then
+    remote_branches="$(__git_remote_heads |
+      grep -E "[^/]+/$_GIT_SUBMIT_USER-" |
+      sed -E "s~[^/]+/$_GIT_SUBMIT_USER-~~")"
+    available_branches="$available_branches"$'\n'"$remote_branches"
+  fi
+  __gitcomp "$available_branches"
+  unset _GIT_SUBMIT_FORCE _GIT_SUBMIT_USER_OPT _GIT_SUBMIT_USER _GIT_SUBMIT_ABORT
 }
 
 complete -F _git_submit git-submit
