@@ -102,6 +102,17 @@ function enable_auto_merge {
     jq -e '.data.enablePullRequestAutoMerge.pullRequest.autoMergeRequest.enabledAt' > /dev/null
 }
 
+# Cancel auto-merge request.
+function disable_auto_merge {
+  hub api graphql -f query='
+    mutation CancelAutoMerge($pullRequestId: ID!) {
+      disablePullRequestAutoMerge(input: {pullRequestId: $pullRequestId}) {
+        pullRequest {viewerCanEnableAutoMerge}
+      }
+    }' -f pullRequestId="$1" |
+    jq -e '.data.enablePullRequestAutoMerge.pullRequest.viewerCanEnableAutoMerge' > /dev/null
+}
+
 readonly REMOTE_PREFIX="remotes/$BASE_REMOTE/$USERNAME-"
 
 function show_available_branches() {
@@ -147,6 +158,7 @@ function get_pr_info {
             id
             number
             viewerCanEnableAutoMerge
+            viewerCanDisableAutoMerge
             autoMergeRequest {enabledAt}
           }
         }
@@ -181,16 +193,31 @@ fi
 # The name of the remote branch tracked by this one.
 readonly BRANCH_MERGE="$(git config "branch.${BRANCH}.merge" | sed -e s/^refs\\/heads\\///)"
 
+if [ -n "$CAN_USE_HUB" ]; then
+  readonly PR_INFO="$(get_pr_info "$BRANCH_MERGE")"
+fi
+
 if [ -n "$ABORT_SUBMIT" ]; then
-  # TODO(cyrille): Actually abort when CAN_USE_HUB and viewerCanDisableAutoMerge.
-  echo_warning "The abort feature is not ready yet, checking out the required branch."
   git checkout "$BRANCH"
+  if [ -n "$CAN_USE_HUB" ]; then
+    if jq -e '.viewerCanDisableAutoMerge' <<< "$PR_INFO" > /dev/null; then
+      disable_auto_merge "$(jq -r '.id' <<< "$PR_INFO")" &&
+        echo_info "Auto-merge for \"$BRANCH\" has been cancelled." ||
+        echo_error "Something wrong happened while cancelling auto-merge."
+    elif ! jq -e '.autoMergeRequest.enabledAt' <<< "$PR_INFO" > /dev/null; then
+      echo_info "Auto-merge is not enabled for this pull-request yet. Nothing to abort."
+    else
+      echo_warning "You don't have the rights to cancel this pull-request."
+      echo_info "Please contact the project admin."
+    fi
+  else
+    echo_warning "Unable to cancel auto-merge (you're not using hub for this project)."
+  fi
   exit
 fi
 
 # Ensures that the Continuous Integration is successful.
 if [ -n "$CAN_USE_HUB" ]; then
-  readonly PR_INFO="$(get_pr_info "$BRANCH_MERGE")"
   readonly CI_STATUS="$(hub ci-status "${BRANCH}")"
   if [ "${CI_STATUS}" != "success" ]; then
     if [ "${FORCE_SUBMIT}" == "-f" ] || [ "${FORCE_SUBMIT}" == "--force" ]; then
