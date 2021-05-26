@@ -110,7 +110,7 @@ function disable_auto_merge {
         pullRequest {viewerCanEnableAutoMerge}
       }
     }' -f pullRequestId="$1" |
-    jq -e '.data.enablePullRequestAutoMerge.pullRequest.viewerCanEnableAutoMerge' > /dev/null
+    jq -e '.data.disablePullRequestAutoMerge.pullRequest.viewerCanEnableAutoMerge' > /dev/null
 }
 
 readonly REMOTE_PREFIX="remotes/$BASE_REMOTE/$USERNAME-"
