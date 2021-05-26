@@ -149,7 +149,7 @@ if [ -z "${FORCE_PUSH}" ]; then
 fi
 
 if [ -n "$AUTO_SUBMIT" ]; then
-  git submit
+  GIT_SUBMIT_AUTO_MERGE=1 git submit
 fi
 
 rm "${MESSAGE_FILE}"
