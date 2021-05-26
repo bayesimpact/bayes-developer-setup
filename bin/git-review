@@ -149,7 +149,12 @@ if [ -z "${FORCE_PUSH}" ]; then
 fi
 
 if [ -n "$AUTO_SUBMIT" ]; then
-  GIT_SUBMIT_AUTO_MERGE=1 git submit
+  if [[ $(git rev-parse $BRANCH) == $(git rev-parse "$REMOTE_REPO/$REMOTE_BRANCH") ]]; then
+    GIT_SUBMIT_AUTO_MERGE=1 git submit
+  else
+    >&2 echo "Local branch is not in the same state as remote branch. Not submitting."
+    >&2 git status -uno
+  fi
 fi
 
 rm "${MESSAGE_FILE}"
