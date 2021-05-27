@@ -20,6 +20,18 @@ case $key in
     readonly AUTO_SUBMIT="$1"
     shift # past argument
     ;;
+    -f*|-s*)
+    shift
+    set -- "${key:0:2}" "-${key:2}" "$@"
+    ;;
+    -u*)
+    >&2 echo "'-u' option should be followed by a username."
+    exit 7
+    ;;
+    -*)
+    >&2 echo "Unrecognized option '$key'."
+    exit 8
+    ;;
     *)
     POSITIONAL+=("$1") # save it in an array for later
     shift # past argument
@@ -27,7 +39,6 @@ case $key in
 esac
 done
 set -- "${POSITIONAL[@]}" # restore positional parameters
-
 
 readonly REVIEWER=$1
 readonly REMOTE_REPO="origin"
