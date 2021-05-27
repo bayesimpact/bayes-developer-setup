@@ -153,6 +153,7 @@ function get_pr_info {
     query IsAutoMergeable($headRefName: String!) {
       repository(name: "{repo}", owner: "{owner}") {
         deleteBranchOnMerge
+        viewerCanAdminister
         pullRequests(last: 1, headRefName: $headRefName, states: [OPEN]) {
           nodes {
             id
@@ -177,6 +178,15 @@ function get_pr_info {
       echo_info "You can still do it from the console:"
       echo_info "$(hub browse -u -- settings#merge_types_delete_branch)"
     fi
+  fi
+  if [[ $GIT_SUBMIT_AUTO_MERGE == 1 ]] &&
+    jq -e '.viewerCanAdminister and (.pullRequests.nodes[0] | (
+      .viewerCanEnableAutoMerge or
+      .viewerCanDisableAutoMerge
+    ) | not)' <<< "$repo_info" > /dev/null; then
+    echo_warning "The repository is not set to enable auto-merge."
+    echo_info "You can do it from the console:"
+    echo_info "$(hub browse -u -- settings#merge_types_auto_merge)"
   fi
   jq '.pullRequests.nodes[0]' <<< "$repo_info"
 }
