@@ -153,6 +153,7 @@ function get_pr_info {
     query IsAutoMergeable($headRefName: String!) {
       repository(name: "{repo}", owner: "{owner}") {
         deleteBranchOnMerge
+        viewerCanAdminister
         pullRequests(last: 1, headRefName: $headRefName, states: [OPEN]) {
           nodes {
             id
@@ -174,8 +175,21 @@ function get_pr_info {
     if [[ $answer == [yY] ]]; then
       hub api "repos/{owner}/{repo}" -X PATCH -F delete_branch_on_merge=true
     else
-      echo_info "You can still do it from the console:"
+      echo_info "You can still do it from this page:"
       echo_info "$(hub browse -u -- settings#merge_types_delete_branch)"
+    fi
+  fi
+  if [[ $GIT_SUBMIT_AUTO_MERGE == 1 ]] &&
+    jq -e '.pullRequests.nodes[0] | (
+      .viewerCanEnableAutoMerge or
+      .viewerCanDisableAutoMerge
+    ) | not' <<< "$repo_info" > /dev/null; then
+    echo_warning "The repository is not set to enable auto-merge."
+    if jq -e '.viewerCanAdminister' <<< "$repo_info" > /dev/null; then
+      echo_info "You can do it from this page:"
+      echo_info "$(hub browse -u -- settings#merge_types_auto_merge)"
+    else
+      echo_info "You can contact a repo admin to set it up for you."
     fi
   fi
   jq '.pullRequests.nodes[0]' <<< "$repo_info"
