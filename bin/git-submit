@@ -91,6 +91,7 @@ function get_default_branch {
 readonly DEFAULT_BRANCH=$(get_default_branch)
 readonly START_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
+readonly AUTO_MERGE_REACTION=":rocket:"
 # Ask Github to merge this PR once CI is successful.
 function enable_auto_merge {
   hub api graphql -f query='
@@ -99,18 +100,57 @@ function enable_auto_merge {
         pullRequest {autoMergeRequest {enabledAt}}
       }
     }' -f pullRequestId="$1" |
-    jq -e '.data.enablePullRequestAutoMerge.pullRequest.autoMergeRequest.enabledAt' > /dev/null
+    jq -e '.data.enablePullRequestAutoMerge.pullRequest.autoMergeRequest.enabledAt' > /dev/null &&
+  # Add a comment so that reviewers can see that the auto-merge is enabled.
+  hub api graphql -F query='
+    mutation ReactComment($pullRequestId: ID!) {
+      addComment(input: {body: "'"$AUTO_MERGE_REACTION"'", subjectId: $pullRequestId}) {
+        commentEdge {
+          node {
+            id
+          }
+        }
+      }
+    }' -f pullRequestId="$1" |
+    jq -e '.data.addComment.commentEdge.node.id' > /dev/null
 }
 
 # Cancel auto-merge request.
 function disable_auto_merge {
   hub api graphql -f query='
-    mutation CancelAutoMerge($pullRequestId: ID!) {
-      disablePullRequestAutoMerge(input: {pullRequestId: $pullRequestId}) {
-        pullRequest {viewerCanEnableAutoMerge}
+      mutation CancelAutoMerge($pullRequestId: ID!) {
+        disablePullRequestAutoMerge(input: {pullRequestId: $pullRequestId}) {
+          pullRequest {viewerCanEnableAutoMerge}
+        }
       }
-    }' -f pullRequestId="$1" |
-    jq -e '.data.disablePullRequestAutoMerge.pullRequest.viewerCanEnableAutoMerge' > /dev/null
+    ' -f pullRequestId="$1" |
+    jq -e '.data.disablePullRequestAutoMerge.pullRequest.viewerCanEnableAutoMerge' > /dev/null ||
+    return 1
+  # Remove comments so that reviewers can see that the auto-merge is disabled.
+  for comment_id in $(hub api graphql -f query='
+    query FindComments($prId: ID!) {
+      node(id: $prId) {
+        ... on PullRequest {
+          comments(last: 10) {
+            nodes {
+              id
+              body
+            }
+          }
+        }
+      }
+    }
+  ' -F prId="$1" |
+    jq -r --arg body "$AUTO_MERGE_REACTION" '.data.node.comments.nodes[]|select(.body == $body).id'
+  ); do
+    hub api graphql -F query='
+      mutation DeleteComment($comment: ID!) {
+        deleteIssueComment(input: {id: $comment}) {
+          clientMutationId
+        }
+      }
+    ' -F comment="$comment_id"
+  done
 }
 
 readonly REMOTE_PREFIX="remotes/$BASE_REMOTE/$USERNAME-"
