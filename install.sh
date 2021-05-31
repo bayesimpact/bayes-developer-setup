@@ -164,6 +164,6 @@ else
     ./common-installs/mac_setup.sh
   fi
 
-  ./common-installs/pip_setup.sh
+  AUTOCOMPLETE_PATH="$AUTOCOMPLETE_PATH" ./common-installs/pip_setup.sh
   # TODO(cyrille): Add lint npm packages.
 fi
