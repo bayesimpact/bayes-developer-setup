@@ -107,7 +107,7 @@ add_to_shellrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" !=
 if [ "$(uname)" == "Darwin" ] && [ -n "$(which brew)" ] && [ -x "$(which brew)" ] && (brew list | grep bash-completion > /dev/null); then
   AUTOCOMPLETE_PATH="$(brew --prefix)/etc/bash_completion.d"
 elif [ "$(uname)" == "Linux" ]; then
-  AUTOCOMPLETE_PATH="/usr/share/bash-completion/completions/"
+  AUTOCOMPLETE_PATH="/usr/share/bash-completion/completions"
 fi
 if [ -d "$AUTOCOMPLETE_PATH" ]; then
   # TODO(cyrille): Put the completion scripts in a subfolder.

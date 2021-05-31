@@ -7,9 +7,6 @@ if ! pip --version | grep -q 'python 3'; then
     exit 1
 fi
 
-# Needed for git review.
-pip install unidecode
-
 function install_if_agree() {
     local question=$1
     shift
@@ -21,7 +18,7 @@ function install_if_agree() {
       fi
     done
     if [ -z "$has_missing_package" ]; then
-      return
+      return 1
     fi
     read -p "$question " -n 1 -r
     echo # Add a blank line.
@@ -31,6 +28,8 @@ function install_if_agree() {
       return 1
     fi
 }
+
+install_if_agree "Installing unidecode for git-review script..." unidecode <<< y
 
 install_if_agree "Would you like to install linters for python code?" \
     "pycodestyle" \
@@ -42,5 +41,5 @@ install_if_agree "Would you like to install linters for python code?" \
 install_if_agree "Would you like to install AWS CLI? " awscli
 
 if install_if_agree "Would you like to install auto-completion for python scripts?" argcomplete; then
-  activate-global-python-argcomplete --dest "$AUTOCOMPLETE_PATH"
+  [ ! -d "$AUTOCOMPLETE_PATH" ] || activate-global-python-argcomplete --dest "$AUTOCOMPLETE_PATH"
 fi
