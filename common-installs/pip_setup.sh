@@ -7,6 +7,9 @@ if ! pip --version | grep -q 'python 3'; then
     exit 1
 fi
 
+# Needed for git review.
+pip install unidecode
+
 function install_if_agree() {
     local question=$1
     shift
