@@ -27,6 +27,8 @@ function install_if_agree() {
     echo # Add a blank line.
     if [[ $REPLY =~ ^[Yy]$ ]]; then
       pip install $@
+    else
+      return 1
     fi
 }
 
@@ -38,3 +40,7 @@ install_if_agree "Would you like to install linters for python code?" \
     "pylint-import-modules"
 
 install_if_agree "Would you like to install AWS CLI? " awscli
+
+if install_if_agree "Would you like to install auto-completion for python scripts?" argcomplete; then
+  activate-global-python-argcomplete --dest "$AUTOCOMPLETE_PATH"
+fi
