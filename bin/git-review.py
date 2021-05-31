@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# PYTHON_ARGCOMPLETE_OK
 """
 Pushes the current branch to the remote repository,
 naming the remote branch with a user-specific prefix,
@@ -14,6 +15,11 @@ import subprocess
 import typing
 from typing import Any, List, Optional
 
+try:
+    import argcomplete
+except ImportError:
+    # This is not needed for the script to work.
+    argcomplete = None
 try:
     import gitlab
 except ImportError:
@@ -227,6 +233,7 @@ def main(string_args: Optional[List[str]] = None) -> None:
         Default is username from the git user's email (such as in username@example.com)''')
     parser.add_argument('-b', '--base', help='''
         Force the pull/merge request to be based on the given base branch on the remote.''')
+    argcomplete.autocomplete(parser)
     args = parser.parse_args(string_args)
     # TODO(cyrille): Update log level depending on required verbosity.
     logging.basicConfig(level=logging.INFO)
