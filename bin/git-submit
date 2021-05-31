@@ -149,7 +149,7 @@ function disable_auto_merge {
           clientMutationId
         }
       }
-    ' -F comment="$comment_id"
+    ' -F comment="$comment_id" > /dev/null
   done
 }
 
