@@ -61,8 +61,9 @@ def _get_git_branches(username: str, base: Optional[str]) -> _References:
         raise ValueError('Empty branch "%s"' % branch)
     default = _run_git(['rev-parse', '--abbrev-ref', f'{_REMOTE_REPO}/HEAD']).split('/')[1]
     if branch == default:
-        # TODO(cyrille): List available branches.
-        raise ValueError('branch required\n')
+        all_branches = set(_run_git(['branch']).split('\n'))
+        all_branches.discard(default)
+        raise ValueError('branch required:\n\t' + '\n\t'.join(all_branches))
     if _has_git_diff('HEAD'):
         raise ValueError(
             'Current git status is dirty. '
