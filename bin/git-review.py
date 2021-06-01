@@ -31,6 +31,8 @@ import unidecode
 _REMOTE_REPO = 'origin'
 _GITLAB_URL_REGEX = re.compile(r'^git@gitlab\.com(.*)\.git')
 
+_REVIEW_PLATFORM: List['_RemoteGitPlatform'] = []
+
 
 def _run_git(command: List[str], **kwargs: Any) -> str:
     return subprocess.check_output(['git'] + command, text=True, **kwargs).strip()
@@ -197,12 +199,20 @@ class _GithubPlatform(_RemoteGitPlatform):
         logging.info(output.replace('github.com', 'reviewable.io/reviews').replace('pull/', ''))
 
 
+def _get_platform() -> _RemoteGitPlatform:
+    """Get the relevant review platform once and for all."""
+
+    if not _REVIEW_PLATFORM:
+        _REVIEW_PLATFORM.append(_RemoteGitPlatform.from_url(
+            _run_git(['config', f'remote.{_REMOTE_REPO}.url'])))
+    return _REVIEW_PLATFORM[0]
+
+
 def _request_review(refs: _References, reviewers: Optional[str]) -> None:
     """Ask for review on the relevant Git platform."""
 
-    remote_url = _run_git(['config', f'remote.{_REMOTE_REPO}.url'])
     message = _make_pr_message(refs, reviewers)
-    _RemoteGitPlatform.from_url(remote_url).request_review(message, refs, reviewers)
+    _get_platform().request_review(message, refs, reviewers)
 
 
 def prepare_push_and_request_review(
