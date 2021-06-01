@@ -8,6 +8,7 @@ with the specified reviewers (if any).
 """
 
 import argparse
+import functools
 import logging
 import os
 import re
@@ -53,13 +54,31 @@ class _References(typing.NamedTuple):
     base: str
 
 
+@functools.lru_cache(maxsize=None)
+def _get_head() -> str:
+    if branch := _run_git(['rev-parse', '--abbrev-ref', 'HEAD']):
+        return branch
+    raise ValueError('Unable to find a branch at HEAD')
+
+
+@functools.lru_cache(maxsize=None)
+def _get_default() -> str:
+    return _run_git(['rev-parse', '--abbrev-ref', f'{_REMOTE_REPO}/HEAD']).split('/')[1]
+
+
+@functools.lru_cache(maxsize=None)
+def _get_existing_remote() -> Optional[str]:
+    try:
+        return _run_git(['config', f'branch.{_get_head()}.merge'])[len('refs.heads.'):]
+    except subprocess.CalledProcessError:
+        return None
+
+
 def _get_git_branches(username: str, base: Optional[str]) -> _References:
     """Compute the different branch names that will be needed throughout the script."""
 
-    branch = _run_git(['rev-parse', '--abbrev-ref', 'HEAD'])
-    if not branch:
-        raise ValueError('Empty branch "%s"' % branch)
-    default = _run_git(['rev-parse', '--abbrev-ref', f'{_REMOTE_REPO}/HEAD']).split('/')[1]
+    branch = _get_head()
+    default = _get_default()
     if branch == default:
         # List branches in user-preferred order, without the asterisk on current branch.
         all_branches = _run_git(['branch', '--format="%(refname:short)"']).split('\n')
@@ -73,10 +92,7 @@ def _get_git_branches(username: str, base: Optional[str]) -> _References:
     if not base:
         base = _get_best_base_branch(branch, default) or default
 
-    try:
-        remote_branch = _run_git(['config', f'branch.{branch}.merge'])[len('refs.heads.'):]
-    except subprocess.CalledProcessError:
-        remote_branch = _cleanup_branch_name(f'{username}-{branch}')
+    remote_branch = _get_existing_remote() or _cleanup_branch_name(f'{username}-{branch}')
 
     return _References(default, branch, remote_branch, base)
 
