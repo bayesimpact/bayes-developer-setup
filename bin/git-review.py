@@ -130,56 +130,79 @@ def _run_git_review_hook(branch: str, remote_branch: str, reviewer: Optional[str
     }))
 
 
+class _RemoteGitPlatform:
+
+    @staticmethod
+    def from_url(remote_url: str) -> '_RemoteGitPlatform':
+        if gitlab_match := _GITLAB_URL_REGEX.match(remote_url):
+            return _GitlabPlatform(gitlab_match[1])
+        if 'github.com' in remote_url:
+            return _GithubPlatform()
+        raise NotImplementedError(f'Review platform not recognized. Remote URL is {remote_url}')
+
+    def request_review(self, message: str, refs: _References, reviewers: Optional[str]) -> None:
+        """Ask for a review on the specific platform."""
+
+        raise NotImplementedError('This should never happen')
+
+
+class _GitlabPlatform(_RemoteGitPlatform):
+
+    def __init__(self, project_name: str) -> None:
+        if not gitlab:
+            raise ValueError(
+                'gitlab tool is not installed, please install it:\n'
+                '  https://github.com/bayesimpact/bayes-developer-setup/blob/HEAD/gitlab-cli.md')
+        self.client = gitlab.Gitlab.from_config()
+        self.project = self.client.projects.get(project_name)
+
+    def _get_reviewers(self, reviewers: Optional[str]) -> List['gitlab.User']:
+        return reviewers and self.client.users.list(username=reviewers) or []
+
+    def request_review(self, message: str, refs: _References, reviewers: Optional[str]) -> None:
+        title, description = message.split('\n', 1)
+        mr_parameters = {
+            'description': description,
+            'source_branch': refs.remote,
+            'target_branch': refs.base,
+            'title': title,
+        }
+        # TODO(cyrille): Allow several reviewers
+        if users := self._get_reviewers(reviewers):
+            mr_parameters['assignee_id'] = users[0].id
+        self.project.merge_request.create(mr_parameters)
+
+
+class _GithubPlatform(_RemoteGitPlatform):
+
+    def __init__(self) -> None:
+        try:
+            subprocess.run(['hub', 'browse', '-u'], check=True)
+        except subprocess.CalledProcessError as error:
+            raise ValueError(
+                'hub tool is not installed, or wrongly configured.\n'
+                'Please install it with ~/.bayes-developer-setup/install.sh') from error
+
+    def request_review(self, message: str, refs: _References, reviewers: Optional[str]) -> None:
+        """Ask for review on Github."""
+
+        command = [
+            'hub', 'pull-request',
+            '-m', message,
+            '-h', refs.remote,
+            '-b', refs.base]
+        if reviewers:
+            command.extend(['-a', reviewers, '-r', reviewers])
+        output = subprocess.check_output(command, text=True)
+        logging.info(output.replace('github.com', 'reviewable.io/reviews').replace('pull/', ''))
+
+
 def _request_review(refs: _References, reviewers: Optional[str]) -> None:
     """Ask for review on the relevant Git platform."""
 
     remote_url = _run_git(['config', f'remote.{_REMOTE_REPO}.url'])
     message = _make_pr_message(refs, reviewers)
-    if gitlab_match := _GITLAB_URL_REGEX.match(remote_url):
-        _request_gitlab_mr(gitlab_match.group(1), message, refs, reviewers)
-        return
-    if 'github.com' in remote_url:
-        _request_github_pr(message, refs, reviewers)
-        return
-    raise NotImplementedError('Review requests are available only for Gitlab and Github.')
-
-
-def _request_gitlab_mr(
-        project_name: str, message: str, refs: _References, reviewers: Optional[str]) -> None:
-    """Ask for review on Gitlab."""
-
-    if not gitlab:
-        raise ValueError(
-            'gitlab tool is not installed, please install it:\n'
-            '  https://github.com/bayesimpact/bayes-developer-setup/blob/HEAD/gitlab-cli.md')
-    client = gitlab.Gitlab.from_config()
-    project = client.projects.get(project_name)
-
-    title, description = message.split('\n', 1)
-    mr_parameters = {
-        'description': description,
-        'source_branch': refs.remote,
-        'target_branch': refs.base,
-        'title': title,
-    }
-    # TODO(cyrille): Allow several reviewers
-    if reviewers and (users := client.users.list(username=reviewers)):
-        mr_parameters['assignee_id'] = users[0].id
-    project.merge_request.create(mr_parameters)
-
-
-def _request_github_pr(message: str, refs: _References, reviewers: Optional[str]) -> None:
-    """Ask for review on Github."""
-
-    command = [
-        'hub', 'pull-request',
-        '-m', message,
-        '-h', refs.remote,
-        '-b', refs.base]
-    if reviewers:
-        command.extend(['-a', reviewers, '-r', reviewers])
-    output = subprocess.check_output(command, text=True)
-    logging.info(output.replace('github.com', 'reviewable.io/reviews').replace('pull/', ''))
+    _RemoteGitPlatform.from_url(remote_url).request_review(message, refs, reviewers)
 
 
 def prepare_push_and_request_review(
