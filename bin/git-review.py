@@ -9,6 +9,7 @@ with the specified reviewers (if any).
 
 import argparse
 import functools
+import json
 import logging
 import os
 import re
@@ -171,6 +172,11 @@ class _RemoteGitPlatform:
 
         raise NotImplementedError('This should never happen')
 
+    def get_available_reviewers(self) -> List[str]:
+        """List the possible values for reviewers."""
+
+        raise NotImplementedError('This should never happen')
+
 
 class _GitlabPlatform(_RemoteGitPlatform):
 
@@ -198,6 +204,9 @@ class _GitlabPlatform(_RemoteGitPlatform):
             mr_parameters['assignee_ids'] = users
         self.project.merge_request.create(mr_parameters)
 
+    def get_available_reviewers(self) -> List[str]:
+        return [member.username for member in self.project.members.list()]
+
 
 class _GithubPlatform(_RemoteGitPlatform):
 
@@ -221,6 +230,11 @@ class _GithubPlatform(_RemoteGitPlatform):
             command.extend(['-a', ','.join(reviewers), '-r', ','.join(reviewers)])
         output = subprocess.check_output(command, text=True)
         logging.info(output.replace('github.com', 'reviewable.io/reviews').replace('pull/', ''))
+
+    def get_available_reviewers(self) -> List[str]:
+        assignees = json.loads(subprocess.check_output(
+            ['hub', 'api', r'repos/{owner}/{repo}/assignees', '--cache', '600'], text=True))
+        return [assignee.get('login', '') for assignee in assignees]
 
 
 @functools.lru_cache()
@@ -277,7 +291,8 @@ def main(string_args: Optional[List[str]] = None) -> None:
     parser.add_argument(
         'reviewers',
         help='Github handles of the reviewers you want to assign to your review, '
-        'as a comma separated list.', nargs='*')
+        'as a comma separated list.', nargs='*',
+    ).completer = lambda **kw: _get_platform().get_available_reviewers()
     parser.add_argument('-f', '--force', action='store_true', help='''
         Forces the push, overwriting any pre-existing remote branch with the prefixed name.
         Also doesn't create the pull/merge request.''')
