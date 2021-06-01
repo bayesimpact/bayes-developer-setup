@@ -7,7 +7,7 @@ You can install this tool without downloading the repo yourself by downloading a
 running `install.sh` (no need to clone the repo yourself). Or simply run the following command: 
 
 ```
-sudo curl -s https://raw.githubusercontent.com/bayesimpact/bayes-developer-setup/master/install.sh | bash
+sudo curl -s https://raw.githubusercontent.com/bayesimpact/bayes-developer-setup/HEAD/install.sh | bash
 ```
 
 Test your installation by verifying that hub was installed correctly.
@@ -48,7 +48,7 @@ to the files. In order to do that run the container with:
 
 To submit a pull request:
 
-* Run `git up` and `git rebase` to make sure your code is up to date with master (this will rebase your code)
+* Run `git up` and `git rebase` to make sure your code is up to date with default branch (this will rebase your code)
 * Run `git review [reviewer-username]` to push your branch and open a pull request with the specified reviewer
 * To update the code for review after making changes, user `git review -f`
 * When your PR is ready to be merged, run `git submit` to merge your PR and delete your local branch
