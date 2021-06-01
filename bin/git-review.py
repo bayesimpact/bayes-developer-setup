@@ -113,7 +113,7 @@ def _push(refs: _References, is_forced: bool) -> None:
 def _make_pr_message(refs: _References, reviewers: Optional[str]) -> str:
     """Create a message for the review request."""
 
-    return _run_git(['log', '--format=%B', f'{refs.base}..{refs.branch}']) + \
+    return _run_git(['log', '--format=%B', f'{_REMOTE_REPO}/{refs.base}..{refs.branch}']) + \
         _run_git_review_hook(refs.branch, refs.remote, reviewers)
 
 
