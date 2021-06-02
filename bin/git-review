@@ -1,5 +1,11 @@
 #!/bin/bash
 
+if [ -n "$GIT_REVIEW_EXPERIMENTAL_PYTHON" ]; then
+  python3 ./git-review.py "$@"
+  exit $?
+fi
+
+
 # Parse the command line arguments.
 POSITIONAL=()
 while [[ $# -gt 0 ]]
