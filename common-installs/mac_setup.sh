@@ -88,7 +88,6 @@ done
 ## Mac packages.
 echo "Here is a list of useful packages."
 declare -a packages=(
-  "bash-completion: Autocompletion for CLI in bash. Useful for git, docker-compose, ..."
   "coreutils: GNU utils instead of FreeBSD (default) ones. Used in several Bayes scripts."
   "gcc: C/C++/Go compiler. We don't use these languages often but it might be useful."
   "imagemagick: Image manipulator."
@@ -97,10 +96,17 @@ declare -a packages=(
   "wget: Downloading content from the web. Used in some Bayes scripts."
 )
 
+readonly BASH_COMPLETION_DESCRIPTION="Autocompletion for CLI in bash. Useful for git, docker-compose, ..."
+if [[ $(sort -V <<< $'4.0.0\n'"$BASH_VERSION" | head -n1) == "4.0.0" ]]; then
+  packages+=("bash-completion@2: $BASH_COMPLETION_DESCRIPTION")
+else
+  packages+=("bash-completion: $BASH_COMPLETION_DESCRIPTION")
+fi
+
 ## Loop through packages.
 for package_with_desc in "${packages[@]}"; do
   package=$(echo "$package_with_desc" | cut -f1 -d:)
-  if which $package > /dev/null || brew list $package >/dev/null 2>&1; then
+  if which -s $package || brew list $package >/dev/null 2>&1; then
     continue
   fi
   echo "$package_with_desc"
@@ -112,8 +118,9 @@ for package_with_desc in "${packages[@]}"; do
   brew install "$package"
   if [[ "$package" == "bash-completion" ]]; then
     echo "[ -f /usr/local/etc/bash_completion ] && . /usr/local/etc/bash_completion" >> ~/.bash_profile
-  fi
-  if [[ "$package" == "pyenv" ]]; then
+  elif [[ "$package" == "bash-completion@2" ]]; then
+    echo "[ -f /usr/local/etc/profile.d/bash_completion.sh ] && . /usr/local/etc/profile.d/bash_completion.sh" >> ~/.bash_profile
+  elif [[ "$package" == "pyenv" ]]; then
     brew install openssl readline sqlite3 xz zlib
     if ! grep pyenv "$HOME/.bash_profile" || ! grep pyenv "$HOME/.bashrc"; then
       printf '# Use pyenv to manage python versions.\nif command -v pyenv 1>/dev/null 2>&1; then\n  eval "$(pyenv init -)"\nfi\n' >> "HOME/.bash_profile"
