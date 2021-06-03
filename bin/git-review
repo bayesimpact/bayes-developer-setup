@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ -n "$GIT_REVIEW_EXPERIMENTAL_PYTHON" ]; then
-  python3 ./git-review.py "$@"
+  python3 "$(dirname "${BASH_SOURCE[0]}")/git-review.py" "$@"
   exit $?
 fi
 
