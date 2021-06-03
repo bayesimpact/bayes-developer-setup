@@ -12,6 +12,7 @@ import functools
 import json
 import logging
 import os
+import platform
 import re
 import subprocess
 import typing
@@ -31,7 +32,9 @@ import unidecode
 
 # Name of the remote to which the script pushes.
 _REMOTE_REPO = 'origin'
-_GITLAB_URL_REGEX = re.compile(r'^git@gitlab\.com(.*)\.git')
+_GITLAB_URL_REGEX = re.compile(r'^git@gitlab\.com:(.*)\.git')
+_GITHUB_URL_REGEX = re.compile(r'^git@github\.com:(.*)\.git')
+_BROWSE_CURRENT = '__current__browse__'
 
 
 class _GitlabMRRequest(TypedDict, total=False):
@@ -48,6 +51,11 @@ def _run_git(command: List[str], **kwargs: Any) -> str:
 
 def _has_git_diff(base: str) -> bool:
     return bool(subprocess.run(['git', 'diff', '--quiet', base]).returncode)
+
+
+# TODO(cyrille): Use wherever applicable.
+def _run_hub(command: List[str], **kwargs: Any) -> str:
+    return subprocess.check_output(['hub'] + command, text=True, **kwargs).strip()
 
 
 class _References(typing.NamedTuple):
@@ -159,12 +167,17 @@ def _run_git_review_hook(branch: str, remote_branch: str, reviewers: List[str]) 
 
 class _RemoteGitPlatform:
 
+    def __init__(self, project_name: str) -> None:
+        self.project_name = project_name
+
     @staticmethod
     def from_url(remote_url: str) -> '_RemoteGitPlatform':
+        """Factory for subclasses depending on URL regex."""
+
         if gitlab_match := _GITLAB_URL_REGEX.match(remote_url):
             return _GitlabPlatform(gitlab_match[1])
-        if 'github.com' in remote_url:
-            return _GithubPlatform()
+        if github_match := _GITHUB_URL_REGEX.match(remote_url):
+            return _GithubPlatform(github_match[1])
         raise NotImplementedError(f'Review platform not recognized. Remote URL is {remote_url}')
 
     def request_review(self, message: str, refs: _References, reviewers: List[str]) -> None:
@@ -177,10 +190,22 @@ class _RemoteGitPlatform:
 
         raise NotImplementedError('This should never happen')
 
+    def _get_review_number(self, branch: str) -> Optional[str]:
+        raise NotImplementedError('This should never happen')
+
+    def get_review_url_for(self, branch: Optional[str]) -> str:
+        """Give the URL where one can review the code on the given branch."""
+
+        number = None if not branch else self._get_review_number(branch)
+        if not number:
+            raise ValueError(f'No opened review for branch "{branch}".')
+        return f'https://reviewable.io/reviews/{self.project_name}/{number}'
+
 
 class _GitlabPlatform(_RemoteGitPlatform):
 
     def __init__(self, project_name: str) -> None:
+        super().__init__(project_name)
         if not gitlab:
             raise ValueError(
                 'gitlab tool is not installed, please install it:\n'
@@ -190,6 +215,9 @@ class _GitlabPlatform(_RemoteGitPlatform):
 
     def _get_reviewers(self, reviewers: List[str]) -> List[int]:
         return [user.id for r in reviewers for user in self.client.users.list(username=r)]
+
+    def _get_review_number(self, branch: str) -> Optional[str]:
+        raise NotImplementedError('Cannot get Merge Request number from Gitlab yet.')
 
     def request_review(self, message: str, refs: _References, reviewers: List[str]) -> None:
         title, description = message.split('\n', 1)
@@ -210,9 +238,10 @@ class _GitlabPlatform(_RemoteGitPlatform):
 
 class _GithubPlatform(_RemoteGitPlatform):
 
-    def __init__(self) -> None:
+    def __init__(self, project_name: str) -> None:
+        super().__init__(project_name)
         try:
-            subprocess.run(['hub', 'browse', '-u'], check=True)
+            subprocess.check_output(['hub', 'browse', '-u'])
         except subprocess.CalledProcessError as error:
             raise ValueError(
                 'hub tool is not installed, or wrongly configured.\n'
@@ -235,6 +264,12 @@ class _GithubPlatform(_RemoteGitPlatform):
         assignees = json.loads(subprocess.check_output(
             ['hub', 'api', r'repos/{owner}/{repo}/assignees', '--cache', '600'], text=True))
         return [assignee.get('login', '') for assignee in assignees]
+
+    def _get_review_number(self, branch: str) -> Optional[str]:
+        return next((
+            number for pr in _run_hub(['pr', 'list', r'--format=%I:%H%n']).split('\n')
+            for number, head_ref in [pr.split(':', 1)]
+            if head_ref == branch), None)
 
 
 @functools.lru_cache()
@@ -282,6 +317,13 @@ def _get_default_username(username: str) -> str:
     return username or _run_git(['config', 'user.email']).split('@')[0]
 
 
+def _browse_to(branch: str) -> None:
+    real_branch = _get_existing_remote() or _get_head() if branch == _BROWSE_CURRENT else branch
+    url = _get_platform().get_review_url_for(real_branch or branch)
+    open_command = 'open' if platform.system() == 'Darwin' else 'xdg-open'
+    subprocess.check_output([open_command, url])
+
+
 def main(string_args: Optional[List[str]] = None) -> None:
     """Parse CLI arguments and run the script."""
 
@@ -304,10 +346,17 @@ def main(string_args: Optional[List[str]] = None) -> None:
         Default is username from the git user's email (such as in username@example.com)''')
     parser.add_argument('-b', '--base', help='''
         Force the pull/merge request to be based on the given base branch on the remote.''')
+    # TODO(cyrille): Add completion with pending requests.
+    parser.add_argument(
+        '--browse', help='''Open the review in a browser window.''',
+        nargs='?', const=_BROWSE_CURRENT)
     argcomplete.autocomplete(parser)
     args = parser.parse_args(string_args)
     # TODO(cyrille): Update log level depending on required verbosity.
     logging.basicConfig(level=logging.INFO)
+    if args.browse:
+        _browse_to(args.browse)
+        return
     prepare_push_and_request_review(
         args.username, args.base, args.reviewers, args.force, args.submit)
 
