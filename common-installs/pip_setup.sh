@@ -7,9 +7,6 @@ if ! pip --version | grep -q 'python 3'; then
     exit 1
 fi
 
-# Needed for git review.
-pip install unidecode
-
 function install_if_agree() {
     local question=$1
     shift
@@ -31,6 +28,8 @@ function install_if_agree() {
       return 1
     fi
 }
+
+install_if_agree "Installing unidecode for git-review..." unidecode <<< 'y'
 
 install_if_agree "Would you like to install linters for python code?" \
     "pycodestyle" \
