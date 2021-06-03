@@ -215,12 +215,18 @@ class _GithubPlatform(_RemoteGitPlatform):
         logging.info(output.replace('github.com', 'reviewable.io/reviews').replace('pull/', ''))
 
 
+@functools.lru_cache()
+def _get_platform() -> _RemoteGitPlatform:
+    """Get the relevant review platform once and for all."""
+
+    return _RemoteGitPlatform.from_url(_run_git(['config', f'remote.{_REMOTE_REPO}.url']))
+
+
 def _request_review(refs: _References, reviewers: Optional[str]) -> None:
     """Ask for review on the relevant Git platform."""
 
-    remote_url = _run_git(['config', f'remote.{_REMOTE_REPO}.url'])
     message = _make_pr_message(refs, reviewers)
-    _RemoteGitPlatform.from_url(remote_url).request_review(message, refs, reviewers)
+    _get_platform().request_review(message, refs, reviewers)
 
 
 def prepare_push_and_request_review(
