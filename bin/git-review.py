@@ -15,6 +15,7 @@ import os
 import platform
 import re
 import subprocess
+import sys
 import typing
 from typing import Any, List, Optional, TypedDict
 
@@ -98,7 +99,7 @@ def _get_git_branches(username: str, base: Optional[str]) -> _References:
     default = _get_default()
     if branch == default:
         # List branches in user-preferred order, without the asterisk on current branch.
-        all_branches = _run_git(['branch', '--format="%(refname:short)"']).split('\n')
+        all_branches = _run_git(['branch', '--format=%(refname:short)']).split('\n')
         all_branches.remove(default)
         raise ValueError('branch required:\n\t' + '\n\t'.join(all_branches))
     if _has_git_diff('HEAD'):
@@ -362,4 +363,9 @@ def main(string_args: Optional[List[str]] = None) -> None:
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except ValueError as error:
+        print(error)
+        # TODO(cyrille): Make sure that those are distinct.
+        sys.exit(hash(str(error)) % 128)
