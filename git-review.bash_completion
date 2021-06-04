@@ -47,7 +47,7 @@ _git_review()
 }
 
 if [ -n "$GIT_REVIEW_EXPERIMENTAL_PYTHON" ]; then
-  eval "$(register-python-argcomplete --external-argcomplete-script "$(dirname "${BASH_SOURCE[0]}")/bin/git-review.py" git-review)"
+  eval "$(register-python-argcomplete --external-argcomplete-script "$(dirname $(readlink "${BASH_SOURCE[0]}"))/bin/git-review.py" git-review)"
 else
   complete -F _git_review git-review
 fi
