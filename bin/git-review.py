@@ -79,6 +79,35 @@ def _run_hub(command: List[str], **kwargs: Any) -> str:
     return subprocess.check_output(['hub'] + command, text=True, **kwargs).strip()
 
 
+_GithubAPIReference = TypedDict('_GithubAPIReference', {'ref': str})
+_GithubAPIUser = TypedDict('_GithubAPIUser', {'login': str})
+
+
+class _GithubAPIPullRequest(TypedDict, total=False):
+    head: _GithubAPIReference
+    number: int
+    requested_reviewers: List[_GithubAPIUser]
+
+
+class _GithubPullRequest(typing.NamedTuple):
+    head: str
+    number: int
+    reviewers: Set[str]
+
+    @staticmethod
+    @functools.lru_cache(maxsize=None)
+    def fetch_all() -> List['_GithubPullRequest']:
+        """Get all pull requests for the current repository."""
+
+        all_prs = typing.cast(List[_GithubAPIPullRequest], json.loads(
+            _run_hub(['api', r'/repos/{owner}/{repo}/pulls', '--cache', '60'])))
+        return [
+            _GithubPullRequest(
+                pr['head']['ref'], pr['number'],
+                {rev['login'] for rev in pr['requested_reviewers']})
+            for pr in all_prs]
+
+
 class _References(typing.NamedTuple):
     """Simple structure containing all needed branch references."""
 
@@ -264,7 +293,12 @@ class _RemoteGitPlatform:
         number = None if not branch else self._get_review_number(branch)
         if not number:
             raise _ScriptError('No opened review for branch "%s".', branch)
-        return f'https://reviewable.io/reviews/{self.project_name}/{number}'
+        return f'https://reviewable.io/reviews/{self.project_name}/{number:d}'
+
+    def get_available_reviews(self) -> List[str]:
+        """List branches the user should review."""
+
+        self._not_implemented('git review --browse', ' autocomplete')
 
 
 class _GitlabPlatform(_RemoteGitPlatform):
@@ -398,6 +432,20 @@ class _GithubPlatform(_RemoteGitPlatform):
             if head_ref == branch
             if not base or base_ref == base), None)
 
+    @functools.cached_property
+    def username(self) -> str:
+        """The handle for the current Github user."""
+
+        with open(f'{os.getenv("HOME")}/.config/hub') as hub_config:
+            user_line = next(line for line in hub_config.readlines() if 'user' in line)
+        return user_line.split(':')[1].strip()
+
+    def get_available_reviews(self) -> List[str]:
+        return [
+            pr.head
+            for pr in _GithubPullRequest.fetch_all()
+            if self.username in pr.reviewers]
+
 
 @functools.lru_cache()
 def _get_platform() -> _RemoteGitPlatform:
@@ -445,13 +493,13 @@ def _browse_to(branch: str) -> None:
 def main(string_args: Optional[List[str]] = None) -> None:
     """Parse CLI arguments and run the script."""
 
-    # TODO(cyrille): Auto-complete.
     parser = argparse.ArgumentParser(description='Start a review for your change list.')
     parser.add_argument(
         'reviewers',
         help='Github handles of the reviewers you want to assign to your review, '
         'as a comma separated list.', nargs='*',
-    ).completer = lambda **kw: _get_platform().get_available_reviewers()
+    ).completer = lambda *, parsed_args, **kw: [] if parsed_args.browse else \
+        _get_platform().get_available_reviewers()
     parser.add_argument('-f', '--force', action='store_true', help='''
         Forces the push, overwriting any pre-existing remote branch with the prefixed name.
         Also doesn't create the pull/merge request.''')
@@ -461,14 +509,15 @@ def main(string_args: Optional[List[str]] = None) -> None:
     parser.add_argument('-u', '--username', type=_get_default_username, default='', help='''
         Set the prefix for the remote branch to USER.
         Default is username from the git user's email (such as in username@example.com)''')
+    # TODO(cyrille): Auto-complete.
     parser.add_argument('-b', '--base', help='''
         Force the pull/merge request to be based on the given base branch on the remote.''')
-    # TODO(cyrille): Add completion with pending requests.
     parser.add_argument(
         '--browse', help='''
         Open the review in a browser window.
         Defaults to the remote branch attached to the current branch.''',
-        nargs='?', const=_BROWSE_CURRENT)
+        nargs='?', const=_BROWSE_CURRENT,
+    ).completer = lambda **kw: _get_platform().get_available_reviews()
     argcomplete.autocomplete(parser)
     args = parser.parse_args(string_args)
     # TODO(cyrille): Update log level depending on required verbosity.
