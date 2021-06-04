@@ -46,6 +46,16 @@ class _GitlabMRRequest(TypedDict, total=False):
     assignee_ids: List[int]
 
 
+class _ScriptError(ValueError):
+
+    def __init__(self, msg: str, *args: Any) -> None:
+        super().__init__(msg % args if args else msg)
+        self._stable_message = msg
+
+    def __hash__(self) -> int:
+        return sum((ord(char) - 64) * 53 ** i for i, char in enumerate(self._stable_message))
+
+
 def _run_git(command: List[str], **kwargs: Any) -> str:
     return subprocess.check_output(['git'] + command, text=True, **kwargs).strip()
 
@@ -76,7 +86,7 @@ class _References(typing.NamedTuple):
 def _get_head() -> str:
     if branch := _run_git(['rev-parse', '--abbrev-ref', 'HEAD']):
         return branch
-    raise ValueError('Unable to find a branch at HEAD')
+    raise _ScriptError('Unable to find a branch at HEAD')
 
 
 @functools.lru_cache()
@@ -101,9 +111,9 @@ def _get_git_branches(username: str, base: Optional[str]) -> _References:
         # List branches in user-preferred order, without the asterisk on current branch.
         all_branches = _run_git(['branch', '--format=%(refname:short)']).split('\n')
         all_branches.remove(default)
-        raise ValueError('branch required:\n\t' + '\n\t'.join(all_branches))
+        raise _ScriptError('branch required:\n\t%s', '\n\t'.join(all_branches))
     if _has_git_diff('HEAD'):
-        raise ValueError(
+        raise _ScriptError(
             'Current git status is dirty. '
             'Commit, stash or revert your changes before sending for review.')
 
@@ -199,7 +209,7 @@ class _RemoteGitPlatform:
 
         number = None if not branch else self._get_review_number(branch)
         if not number:
-            raise ValueError(f'No opened review for branch "{branch}".')
+            raise _ScriptError('No opened review for branch "%s".', branch)
         return f'https://reviewable.io/reviews/{self.project_name}/{number}'
 
 
@@ -208,7 +218,7 @@ class _GitlabPlatform(_RemoteGitPlatform):
     def __init__(self, project_name: str) -> None:
         super().__init__(project_name)
         if not gitlab:
-            raise ValueError(
+            raise _ScriptError(
                 'gitlab tool is not installed, please install it:\n'
                 '  https://github.com/bayesimpact/bayes-developer-setup/blob/HEAD/gitlab-cli.md')
         self.client = gitlab.Gitlab.from_config()
@@ -244,7 +254,7 @@ class _GithubPlatform(_RemoteGitPlatform):
         try:
             subprocess.check_output(['hub', 'browse', '-u'])
         except subprocess.CalledProcessError as error:
-            raise ValueError(
+            raise _ScriptError(
                 'hub tool is not installed, or wrongly configured.\n'
                 'Please install it with ~/.bayes-developer-setup/install.sh') from error
 
@@ -294,14 +304,14 @@ def prepare_push_and_request_review(
     """Prepare a local Change List for review."""
 
     if not username:
-        raise ValueError(
+        raise _ScriptError(
             'Could not find username, most probably you need to setup an email with:\n'
             '  git config user.email <me@bayesimpact.org>')
     refs = _get_git_branches(username, base)
     merge_base = _run_git(['merge-base', 'HEAD', f'{_REMOTE_REPO}/{refs.base}'])
     if not _has_git_diff(merge_base):
         # TODO(cyrille): Update this behavior (depending on base being main or something else).
-        raise ValueError('All code on this branch has already been submitted')
+        raise _ScriptError('All code on this branch has already been submitted.')
     _push(refs, is_forced)
     if not is_forced:
         _request_review(refs, reviewers)
@@ -310,7 +320,7 @@ def prepare_push_and_request_review(
     local_sha = _run_git(['rev-parse', refs.branch])
     remote_sha = _run_git(['rev-parse', f'{_REMOTE_REPO}/{refs.remote}'])
     if local_sha != remote_sha:
-        raise ValueError('Local branch is not in the same state as remote branch. Not submitting.')
+        raise _ScriptError('Local branch is not in the same state as remote branch. Not submitting.')
     _run_git(['submit'], env=dict(os.environ, GIT_SUBMIT_AUTO_MERGE='1'))
 
 
@@ -365,7 +375,7 @@ def main(string_args: Optional[List[str]] = None) -> None:
 if __name__ == '__main__':
     try:
         main()
-    except ValueError as error:
+    except _ScriptError as error:
         print(error)
         # TODO(cyrille): Make sure that those are distinct.
-        sys.exit(hash(str(error)) % 128)
+        sys.exit(hash(error))
