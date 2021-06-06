@@ -16,6 +16,7 @@ import platform
 import re
 import subprocess
 import sys
+import time
 import typing
 from typing import Any, List, Optional, TypedDict
 
@@ -35,6 +36,7 @@ import unidecode
 _REMOTE_REPO = 'origin'
 _GITLAB_URL_REGEX = re.compile(r'^git@gitlab\.com:(.*)\.git')
 _GITHUB_URL_REGEX = re.compile(r'^git@github\.com:(.*)\.git')
+_WORD_REGEX = re.compile(r'\w+')
 _BROWSE_CURRENT = '__current__browse__'
 
 
@@ -102,20 +104,40 @@ def _get_existing_remote() -> Optional[str]:
         return None
 
 
+def _create_default_review() -> Optional[str]:
+    _run_git(['fetch'])
+    merge_base = _run_git(['merge-base', 'HEAD', 'origin/HEAD'])
+    if not _has_git_diff(merge_base):
+        # No new commit to review.
+        return None
+    title = _run_git(['log', '-1', r'--format=%s'])
+    branch = '-'.join(
+        word.lower() for word in _WORD_REGEX.findall(title.replace('_', '-'))[:2])
+    branch += f'-{int(time.time())}'
+    _run_git(['checkout', '-b', branch])
+    _run_git(['checkout', '-'])
+    _run_git(['reset', '--hard', merge_base])
+    _run_git(['checkout', '-'])
+    _get_head.cache_clear()
+    return branch
+
+
 def _get_git_branches(username: str, base: Optional[str]) -> _References:
     """Compute the different branch names that will be needed throughout the script."""
 
-    branch = _get_head()
-    default = _get_default()
-    if branch == default:
-        # List branches in user-preferred order, without the asterisk on current branch.
-        all_branches = _run_git(['branch', '--format=%(refname:short)']).split('\n')
-        all_branches.remove(default)
-        raise _ScriptError('branch required:\n\t%s', '\n\t'.join(all_branches))
     if _has_git_diff('HEAD'):
         raise _ScriptError(
             'Current git status is dirty. '
             'Commit, stash or revert your changes before sending for review.')
+    branch = _get_head()
+    default = _get_default()
+    if branch == default:
+        branch = _create_default_review()
+        if not branch:
+            # List branches in user-preferred order, without the asterisk on current branch.
+            all_branches = _run_git(['branch', '--format=%(refname:short)']).split('\n')
+            all_branches.remove(default)
+            raise _ScriptError('branch required:\n\t%s', '\n\t'.join(all_branches))
 
     if not base:
         base = _get_best_base_branch(branch, default) or default
@@ -133,7 +155,7 @@ def _get_best_base_branch(branch: str, default: str) -> Optional[str]:
         if remote_branches := _run_git(
                 ['branch', '-r', '--contains', sha1, '--list', f'{_REMOTE_REPO}/*']):
             break
-    if not remote_branches:
+    else:
         return None
     if any(rb.endswith(f'/{default}') for rb in remote_branches.split('\n')):
         return None
