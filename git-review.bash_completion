@@ -3,57 +3,57 @@
 # bash completion support for git-review
 
 if [ -n "$GIT_REVIEW_EXPERIMENTAL_PYTHON" ]; then
-  readonly PYTHON_SCRIPT="$(dirname $(readlink "${BASH_SOURCE[0]}"))/bin/git-review.py"
+  readonly PYTHON_SCRIPT="$HOME/.bayes-developer-setup/bin/git-review.py"
   eval "$(register-python-argcomplete --external-argcomplete-script "$PYTHON_SCRIPT" git-review |
     # Rename the auto-completion function to be caught by git completion.
     sed 's!_python_argcomplete_'"$PYTHON_SCRIPT"'!_git_review!' |
     # Remove 'git' word from auto-completed line, to avoid parsing 'review' as an argument to the script.
-    sed '/_git_review/a\ \ \ \ [[ $COMP_LINE == "git "* ]] && COMP_LINE=${COMP_LINE:4} && ((COMP_POINT-=4))')"
-  exit
-fi
+    sed '/_git_review/a\
+     [[ $COMP_LINE == "git "* ]] && COMP_LINE=${COMP_LINE:4} && ((COMP_POINT-=4));')"
+else
+  _git_review()
+  {
+    local cur=${COMP_WORDS[COMP_CWORD]}
+    local last=${cur##*,}
+    local prev=${cur%"$last"}
 
-_git_review()
-{
-  local cur=${COMP_WORDS[COMP_CWORD]}
-  local last=${cur##*,}
-  local prev=${cur%"$last"}
-
-  local remote_repo="$(git remote | head -n 1)"
-  if [ -z "$remote_repo" ]; then
-    echo "No remote" 1>&2
-    return 1
-  fi
-  local remote_url="$(git config --get remote.$remote_repo.url)"
-
-  local reviewers=""
-
-  if [[ $remote_url == *"gitlab.com"* ]]; then
-    # GitLab
-
-    # Check if tool exists.
-    if [ -z "$(which gitlab)" ] || ! [ -x $(which gitlab) ]; then
-      # TODO(pascal): Fix the error reporting.
-      echo "gitlab tool is not installed, please install it:" 1>&2
-      echo "  https://github.com/bayesimpact/bayes-developer-setup/blob/HEAD/gitlab-cli.md" 1>&2
-      return 2
+    local remote_repo="$(git remote | head -n 1)"
+    if [ -z "$remote_repo" ]; then
+      echo "No remote" 1>&2
+      return 1
     fi
-    # TODO(pascal): Use cache when/if it gets implemented;
-    # https://github.com/python-gitlab/python-gitlab/issues/758
-    local gitlab_project_name=${remote_url/git@gitlab.com:/}
-    gitlab_project_name=${gitlab_project_name/.git/}
-    local gitlab_project_id="$(gitlab project get --id "$gitlab_project_name" | grep ^id: | cut -d ' ' -f 2)"
-    reviewers="$(gitlab project-member list --project-id "$gitlab_project_id" | grep ^username: | cut -d ' ' -f 2)"
-  else
-    # GitHub
+    local remote_url="$(git config --get remote.$remote_repo.url)"
 
-    # TODO(cyrille): Add a nice error message when hub returns an error.
-    reviewers="$(hub api -t repos/{owner}/{repo}/assignees --cache 600 | grep login | cut -f 2)"
-  fi
-  local remaining_reviewers=$(echo "$reviewers $prev $prev" | tr ', ' "\n" | sort | uniq -u)
-  COMPREPLY=( $(compgen -P "$prev" -W "$remaining_reviewers" -- $last) )
-  if [[ ${#COMPREPLY[@]} == 1 ]] && [[ ${COMPREPLY[0]} == $cur ]] && [[ ${#remaining_reviewers} > 0 ]]; then
-    COMPREPLY=("$cur,")
-  fi
-}
+    local reviewers=""
 
-complete -F _git_review git-review
+    if [[ $remote_url == *"gitlab.com"* ]]; then
+      # GitLab
+
+      # Check if tool exists.
+      if [ -z "$(which gitlab)" ] || ! [ -x $(which gitlab) ]; then
+        # TODO(pascal): Fix the error reporting.
+        echo "gitlab tool is not installed, please install it:" 1>&2
+        echo "  https://github.com/bayesimpact/bayes-developer-setup/blob/HEAD/gitlab-cli.md" 1>&2
+        return 2
+      fi
+      # TODO(pascal): Use cache when/if it gets implemented;
+      # https://github.com/python-gitlab/python-gitlab/issues/758
+      local gitlab_project_name=${remote_url/git@gitlab.com:/}
+      gitlab_project_name=${gitlab_project_name/.git/}
+      local gitlab_project_id="$(gitlab project get --id "$gitlab_project_name" | grep ^id: | cut -d ' ' -f 2)"
+      reviewers="$(gitlab project-member list --project-id "$gitlab_project_id" | grep ^username: | cut -d ' ' -f 2)"
+    else
+      # GitHub
+
+      # TODO(cyrille): Add a nice error message when hub returns an error.
+      reviewers="$(hub api -t repos/{owner}/{repo}/assignees --cache 600 | grep login | cut -f 2)"
+    fi
+    local remaining_reviewers=$(echo "$reviewers $prev $prev" | tr ', ' "\n" | sort | uniq -u)
+    COMPREPLY=( $(compgen -P "$prev" -W "$remaining_reviewers" -- $last) )
+    if [[ ${#COMPREPLY[@]} == 1 ]] && [[ ${COMPREPLY[0]} == $cur ]] && [[ ${#remaining_reviewers} > 0 ]]; then
+      COMPREPLY=("$cur,")
+    fi
+  }
+
+  complete -F _git_review git-review
+fi
