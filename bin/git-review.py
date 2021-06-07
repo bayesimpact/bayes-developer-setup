@@ -100,7 +100,14 @@ def _get_head() -> str:
 
 @functools.lru_cache()
 def _get_default() -> str:
-    return _run_git(['rev-parse', '--abbrev-ref', f'{_REMOTE_REPO}/HEAD']).split('/')[1]
+    try:
+        return _run_git(['rev-parse', '--abbrev-ref', f'{_REMOTE_REPO}/HEAD']).split('/')[1]
+    except subprocess.CalledProcessError as error:
+        raise _ScriptError(
+            'Unable to find a remote HEAD reference.\n'
+            f'Please run `git remote set-head {_REMOTE_REPO} -a` and rerun your command.'
+        ) from error
+
 
 
 @functools.lru_cache()
