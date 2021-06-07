@@ -30,7 +30,6 @@ const author = review.pullRequest.author.username
 const reviewers = _.without(
   _.union(
     _.map(review.pullRequest.requestedReviewers, 'username'),
-    _.map(review.pullRequest.assignees, 'username'),
     Object.keys(review.pullRequest.approvals || {}).
       filter(u => review.pullRequest.approvals[u] === 'approved')
   ), author)

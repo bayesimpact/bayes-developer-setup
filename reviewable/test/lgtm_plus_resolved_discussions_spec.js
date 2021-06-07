@@ -18,6 +18,7 @@ const template = {
       username: 'dedan',
     },
     assignees: [],
+    requestedReviewers: [],
   },
   sentiments: [],
   discussions: [],
@@ -32,8 +33,8 @@ describe('Approval via LGTM', () => {
   })
 
   it('should be complete with LGTM of one approver', () => {
-    // No assignees.
-    review.pullRequest.assignees.length = 0
+    // No reviewers.
+    review.pullRequest.requestedReviewers.length = 0
 
     review.pullRequest.approvals = {pcorpet: 'approved'}
 
@@ -62,8 +63,8 @@ describe('Approval via LGTM', () => {
     expect(res.completed).to.equal(true)
   })
 
-  it('should not be complete without LGTM of one assignee', () => {
-    review.pullRequest.assignees.push({username: 'pcorpet'})
+  it('should not be complete without LGTM of one requested reviewer', () => {
+    review.pullRequest.requestedReviewers.push({username: 'pcorpet'})
     let res = funcToTest(_, review)
     expect(res.completed).to.equal(false)
 
@@ -89,9 +90,26 @@ describe('Approval via LGTM', () => {
     expect(res.completed).to.equal(true)
   })
 
-  it('should not be complete with a cancelled LGTM from an assignee', () => {
-    // No assignees.
-    review.pullRequest.assignees.length = 0
+  it('should not be complete with a LGTM from an assignee', () => {
+    // No reviewers.
+    review.pullRequest.requestedReviewers.length = 0
+
+    review.pullRequest.assignees.push({username: 'pcorpet'})
+
+    let res = funcToTest(_, review)
+    expect(res.completed).to.equal(false)
+
+    review.sentiments.push({
+      username: 'pcorpet',
+      emojis: ['lgtm'],
+    })
+    res = funcToTest(_, review)
+    expect(res.completed).to.equal(false)
+  })
+
+  it('should not be complete with a cancelled LGTM from a requested reviewer', () => {
+    // No reviewers.
+    review.pullRequest.requestedReviewers.length = 0
 
     review.pullRequest.approvals = {pcorpet: 'approved'}
 
@@ -113,8 +131,8 @@ describe('Approval via LGTM', () => {
   })
 
   it('should be completable after an LGTM has been cancelled', () => {
-    // No assignees.
-    review.pullRequest.assignees.length = 0
+    // No reviewers.
+    review.pullRequest.requestedReviewers.length = 0
 
     review.pullRequest.approvals = {pcorpet: 'approved'}
 
@@ -154,7 +172,7 @@ describe('Approval', () => {
   })
 
   it('marks discussions as unresolved when someone is blocking, even with an LGTM', () => {
-    review.pullRequest.assignees.push({username: 'pcorpet'})
+    review.pullRequest.requestedReviewers.push({username: 'pcorpet'})
     review.sentiments.push({
       username: 'pcorpet',
       emojis: ['lgtm'],
@@ -183,7 +201,7 @@ describe('Approval', () => {
 
   it('marks discussions as resolved when the author is satisfied', () => {
     review.pullRequest.author.username = 'dedan'
-    review.pullRequest.assignees.push({username: 'pcorpet'})
+    review.pullRequest.requestedReviewers.push({username: 'pcorpet'})
     review.sentiments.push({
       username: 'pcorpet',
       emojis: ['lgtm'],
@@ -210,7 +228,7 @@ describe('Approval', () => {
   })
 
   it('describes the line with a discussion that is not complete', () => {
-    review.pullRequest.assignees.push({username: 'pcorpet'})
+    review.pullRequest.requestedReviewers.push({username: 'pcorpet'})
     review.sentiments.push({
       username: 'pcorpet',
       emojis: ['lgtm'],
@@ -245,7 +263,7 @@ describe('Approval', () => {
 
   it('is not given when the author is the one who gave themself an LGTM', () => {
     review.pullRequest.author.username = 'dedan'
-    review.pullRequest.assignees.push({username: 'dedan'})
+    review.pullRequest.requestedReviewers.push({username: 'dedan'})
     review.sentiments.push({
       username: 'dedan',
       emojis: ['lgtm'],
