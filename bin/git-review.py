@@ -16,6 +16,7 @@ import platform
 import re
 import subprocess
 import sys
+import time
 import typing
 from typing import Any, List, Optional, TypedDict
 import unicodedata
@@ -33,9 +34,15 @@ except ImportError:
 
 # Name of the remote to which the script pushes.
 _REMOTE_REPO = 'origin'
+# Chars we want to avoid in branch names.
 _FORBIDDEN_CHARS_REGEX = re.compile(r'[#\u0300-\u036f]')
+# Remote URL pattern for Gitlab repos.
 _GITLAB_URL_REGEX = re.compile(r'^git@gitlab\.com:(.*)\.git')
+# Remote URL pattern for Github repos.
 _GITHUB_URL_REGEX = re.compile(r'^git@github\.com:(.*)\.git')
+# Word pattern, for slugging.
+_WORD_REGEX = re.compile(r'\w+')
+# Default value for the browse action.
 _BROWSE_CURRENT = '__current__browse__'
 
 
@@ -83,6 +90,7 @@ class _References(typing.NamedTuple):
     base: str
 
 
+# TODO(cyrille): Consider uncaching.
 @functools.lru_cache()
 def _get_head() -> str:
     if branch := _run_git(['rev-parse', '--abbrev-ref', 'HEAD']):
@@ -103,20 +111,42 @@ def _get_existing_remote() -> Optional[str]:
         return None
 
 
+def _create_branch_for_review() -> Optional[str]:
+    _run_git(['fetch'])
+    merge_base = _run_git(['merge-base', 'HEAD', 'origin/HEAD'])
+    if not _has_git_diff(merge_base):
+        # No new commit to review.
+        return None
+    title = _run_git(['log', '-1', r'--format=%s'])
+    # Create a clean branch name from the first two words of the commit message.
+    branch = '-'.join(
+        word.lower()
+        for word in _WORD_REGEX.findall(_cleanup_branch_name(title).replace('_', '-'))[:2])
+    branch += f'-{int(time.time()):d}'
+    _run_git(['checkout', '-b', branch])
+    _run_git(['checkout', '-'])
+    _run_git(['reset', '--hard', merge_base])
+    _run_git(['checkout', '-'])
+    _get_head.cache_clear()
+    return branch
+
+
 def _get_git_branches(username: str, base: Optional[str]) -> _References:
     """Compute the different branch names that will be needed throughout the script."""
 
-    branch = _get_head()
-    default = _get_default()
-    if branch == default:
-        # List branches in user-preferred order, without the asterisk on current branch.
-        all_branches = _run_git(['branch', '--format=%(refname:short)']).split('\n')
-        all_branches.remove(default)
-        raise _ScriptError('branch required:\n\t%s', '\n\t'.join(all_branches))
     if _has_git_diff('HEAD'):
         raise _ScriptError(
             'Current git status is dirty. '
             'Commit, stash or revert your changes before sending for review.')
+    branch = _get_head()
+    default = _get_default()
+    if branch == default:
+        branch = _create_branch_for_review()
+        if not branch:
+            # List branches in user-preferred order, without the asterisk on current branch.
+            all_branches = _run_git(['branch', '--format=%(refname:short)']).split('\n')
+            all_branches.remove(default)
+            raise _ScriptError('branch required:\n\t%s', '\n\t'.join(all_branches))
 
     if not base:
         base = _get_best_base_branch(branch, default) or default
@@ -134,7 +164,7 @@ def _get_best_base_branch(branch: str, default: str) -> Optional[str]:
         if remote_branches := _run_git(
                 ['branch', '-r', '--contains', sha1, '--list', f'{_REMOTE_REPO}/*']):
             break
-    if not remote_branches:
+    else:
         return None
     if any(rb.endswith(f'/{default}') for rb in remote_branches.split('\n')):
         return None
