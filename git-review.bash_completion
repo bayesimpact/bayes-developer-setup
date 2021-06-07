@@ -2,6 +2,16 @@
 #
 # bash completion support for git-review
 
+if [ -n "$GIT_REVIEW_EXPERIMENTAL_PYTHON" ]; then
+  readonly PYTHON_SCRIPT="$(dirname $(readlink "${BASH_SOURCE[0]}"))/bin/git-review.py"
+  eval "$(register-python-argcomplete --external-argcomplete-script "$PYTHON_SCRIPT" git-review |
+    # Rename the auto-completion function to be caught by git completion.
+    sed 's!_python_argcomplete_'"$PYTHON_SCRIPT"'!_git_review!' |
+    # Remove 'git' word from auto-completed line, to avoid parsing 'review' as an argument to the script.
+    sed '/_git_review/a\ \ \ \ [[ $COMP_LINE == "git "* ]] && COMP_LINE=${COMP_LINE:4} && ((COMP_POINT-=4))')"
+  exit
+fi
+
 _git_review()
 {
   local cur=${COMP_WORDS[COMP_CWORD]}
@@ -46,11 +56,4 @@ _git_review()
   fi
 }
 
-if [ -n "$GIT_REVIEW_EXPERIMENTAL_PYTHON" ]; then
-  readonly PYTHON_SCRIPT="$(dirname $(readlink "${BASH_SOURCE[0]}"))/bin/git-review.py"
-  eval "$(register-python-argcomplete --external-argcomplete-script "$PYTHON_SCRIPT" git-review |
-    # Rename the auto-completion function to be caught by git completion.
-    sed 's!_python_argcomplete_'"$PYTHON_SCRIPT"'!_git_review!')"
-else
-  complete -F _git_review git-review
-fi
+complete -F _git_review git-review
