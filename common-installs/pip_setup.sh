@@ -29,8 +29,6 @@ function install_if_agree() {
     fi
 }
 
-install_if_agree "Installing unidecode for git-review..." unidecode <<< 'y'
-
 install_if_agree "Would you like to install linters for python code?" \
     "pycodestyle" \
     "pylint" \

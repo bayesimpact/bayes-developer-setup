@@ -18,6 +18,7 @@ import subprocess
 import sys
 import typing
 from typing import Any, List, Optional, TypedDict
+import unicodedata
 
 try:
     import argcomplete
@@ -29,10 +30,10 @@ try:
 except ImportError:
     # This is not needed when pushing to a Github repo.
     gitlab = None
-import unidecode
 
 # Name of the remote to which the script pushes.
 _REMOTE_REPO = 'origin'
+_FORBIDDEN_CHARS_REGEX = re.compile(r'[#\u0300-\u036f]')
 _GITLAB_URL_REGEX = re.compile(r'^git@gitlab\.com:(.*)\.git')
 _GITHUB_URL_REGEX = re.compile(r'^git@github\.com:(.*)\.git')
 _BROWSE_CURRENT = '__current__browse__'
@@ -143,7 +144,7 @@ def _get_best_base_branch(branch: str, default: str) -> Optional[str]:
 def _cleanup_branch_name(branch: str) -> str:
     """Avoid unwanted characters in branche names."""
 
-    return unidecode.unidecode(''.join(branch.split('#')))
+    return _FORBIDDEN_CHARS_REGEX.sub('', unicodedata.normalize('NFD', branch))
 
 
 def _push(refs: _References, is_forced: bool) -> None:
