@@ -9,9 +9,11 @@ with the specified reviewers (if any).
 
 import argparse
 import functools
+import inspect
 import json
 import logging
 import os
+from os import path
 import platform
 import re
 import subprocess
@@ -20,6 +22,12 @@ import time
 import typing
 from typing import Any, List, Optional, Set, TypedDict
 import unicodedata
+
+cmd_folder = path.realpath(path.dirname(inspect.getfile(inspect.currentframe())))
+if cmd_folder not in sys.path:
+    sys.path.insert(0, cmd_folder)
+
+import helper  # pylint: disable=wrong-import-position
 
 try:
     import argcomplete
@@ -32,8 +40,6 @@ except ImportError:
     # This is not needed when pushing to a Github repo.
     gitlab = None
 
-# Name of the remote to which the script pushes.
-_REMOTE_REPO = 'origin'
 # Chars we want to avoid in branch names.
 _FORBIDDEN_CHARS_REGEX = re.compile(r'[#\u0300-\u036f]')
 # Remote URL pattern for Gitlab repos.
@@ -52,20 +58,6 @@ class _GitlabMRRequest(TypedDict, total=False):
     target_branch: str
     title: str
     assignee_ids: List[int]
-
-
-class _ScriptError(ValueError):
-
-    def __init__(self, msg: str, *args: Any) -> None:
-        super().__init__(msg % args if args else msg)
-        self._stable_message = msg
-
-    def __hash__(self) -> int:
-        return sum((ord(char) - 64) * 53 ** i for i, char in enumerate(self._stable_message))
-
-
-def _run_git(command: List[str], **kwargs: Any) -> str:
-    return subprocess.check_output(['git'] + command, text=True, **kwargs).strip()
 
 
 def _has_git_diff(base: str) -> bool:
@@ -93,46 +85,35 @@ class _References(typing.NamedTuple):
 # TODO(cyrille): Consider uncaching.
 @functools.lru_cache()
 def _get_head() -> str:
-    if branch := _run_git(['rev-parse', '--abbrev-ref', 'HEAD']):
+    if branch := helper.run_git(['rev-parse', '--abbrev-ref', 'HEAD']):
         return branch
-    raise _ScriptError('Unable to find a branch at HEAD')
-
-
-@functools.lru_cache()
-def _get_default() -> str:
-    try:
-        return _run_git(['rev-parse', '--abbrev-ref', f'{_REMOTE_REPO}/HEAD']).split('/')[1]
-    except subprocess.CalledProcessError as error:
-        raise _ScriptError(
-            'Unable to find a remote HEAD reference.\n'
-            f'Please run `git remote set-head {_REMOTE_REPO} -a` and rerun your command.'
-        ) from error
+    raise helper.ScriptError('Unable to find a branch at HEAD')
 
 
 @functools.lru_cache()
 def _get_existing_remote() -> Optional[str]:
     try:
-        return _run_git(['config', f'branch.{_get_head()}.merge'])[len('refs.heads.'):]
+        return helper.run_git(['config', f'branch.{_get_head()}.merge'])[len('refs.heads.'):]
     except subprocess.CalledProcessError:
         return None
 
 
 def _create_branch_for_review() -> Optional[str]:
-    _run_git(['fetch'])
-    merge_base = _run_git(['merge-base', 'HEAD', 'origin/HEAD'])
+    helper.run_git(['fetch'])
+    merge_base = helper.run_git(['merge-base', 'HEAD', 'origin/HEAD'])
     if not _has_git_diff(merge_base):
         # No new commit to review.
         return None
-    title = _run_git(['log', '-1', r'--format=%s'])
+    title = helper.run_git(['log', '-1', r'--format=%s'])
     # Create a clean branch name from the first two words of the commit message.
     branch = '-'.join(
         word.lower()
         for word in _WORD_REGEX.findall(_cleanup_branch_name(title).replace('_', '-'))[:2])
     branch += f'-{int(time.time()):d}'
-    _run_git(['checkout', '-b', branch])
-    _run_git(['checkout', '-'])
-    _run_git(['reset', '--hard', merge_base])
-    _run_git(['checkout', '-'])
+    helper.run_git(['checkout', '-b', branch])
+    helper.run_git(['checkout', '-'])
+    helper.run_git(['reset', '--hard', merge_base])
+    helper.run_git(['checkout', '-'])
     _get_head.cache_clear()
     return branch
 
@@ -141,18 +122,18 @@ def _get_git_branches(username: str, base: Optional[str]) -> _References:
     """Compute the different branch names that will be needed throughout the script."""
 
     if _has_git_diff('HEAD'):
-        raise _ScriptError(
+        raise helper.ScriptError(
             'Current git status is dirty. '
             'Commit, stash or revert your changes before sending for review.')
     branch = _get_head()
-    default = _get_default()
+    default = helper.get_default()
     if branch == default:
         new_branch = _create_branch_for_review()
         if not new_branch:
             # List branches in user-preferred order, without the asterisk on current branch.
-            all_branches = _run_git(['branch', '--format=%(refname:short)']).split('\n')
+            all_branches = helper.run_git(['branch', '--format=%(refname:short)']).split('\n')
             all_branches.remove(default)
-            raise _ScriptError('branch required:\n\t%s', '\n\t'.join(all_branches))
+            raise helper.ScriptError('branch required:\n\t%s', '\n\t'.join(all_branches))
         branch = new_branch
 
     if not base:
@@ -167,9 +148,9 @@ def _get_best_base_branch(branch: str, default: str) -> Optional[str]:
     """Guess on which branch the changes should be merged."""
 
     remote_branches: Optional[str] = None
-    for sha1 in _run_git(['rev-list', '--max-count=5', branch]).split('\n')[1:]:
-        if remote_branches := _run_git(
-                ['branch', '-r', '--contains', sha1, '--list', f'{_REMOTE_REPO}/*']):
+    for sha1 in helper.run_git(['rev-list', '--max-count=5', branch]).split('\n')[1:]:
+        if remote_branches := helper.run_git(
+                ['branch', '-r', '--contains', sha1, '--list', f'{helper.REMOTE_REPO}/*']):
             break
     else:
         return None
@@ -190,21 +171,22 @@ def _push(refs: _References, is_forced: bool) -> None:
     command = ['push']
     if is_forced:
         command.append('-f')
-    command.extend(['-u', _REMOTE_REPO, f'{refs.branch}:{refs.remote}'])
-    _run_git(command)
+    command.extend(['-u', helper.REMOTE_REPO, f'{refs.branch}:{refs.remote}'])
+    helper.run_git(command)
 
 
 def _make_pr_message(refs: _References, reviewers: List[str]) -> str:
     """Create a message for the review request."""
 
-    return _run_git(['log', '--format=%B', f'{_REMOTE_REPO}/{refs.base}..{refs.branch}']) + \
-        _run_git_review_hook(refs.branch, refs.remote, reviewers)
+    return helper.run_git([
+        'log', r'--format=%B', f'{helper.REMOTE_REPO}/{refs.base}..{refs.branch}',
+    ]) + helper.run_git_review_hook(refs.branch, refs.remote, reviewers)
 
 
 def _run_git_review_hook(branch: str, remote_branch: str, reviewers: List[str]) -> str:
     """Run the git-review hook if it exists."""
 
-    hook_script = f'{_run_git(["rev-parse", "--show-toplevel"])}/.git-review-hook'
+    hook_script = f'{helper.run_git(["rev-parse", "--show-toplevel"])}/.git-review-hook'
     if not os.access(hook_script, os.X_OK):
         return ''
     return subprocess.check_output(hook_script, text=True, env=dict(os.environ, **{
@@ -255,7 +237,7 @@ class _RemoteGitPlatform:
 
         number = None if not branch else self._get_review_number(branch)
         if not number:
-            raise _ScriptError('No opened review for branch "%s".', branch)
+            raise helper.ScriptError('No opened review for branch "%s".', branch)
         return f'https://reviewable.io/reviews/{self.project_name}/{number}'
 
 
@@ -264,7 +246,7 @@ class _GitlabPlatform(_RemoteGitPlatform):
     def __init__(self, project_name: str) -> None:
         super().__init__(project_name)
         if not gitlab:
-            raise _ScriptError(
+            raise helper.ScriptError(
                 'gitlab tool is not installed, please install it:\n'
                 '  https://github.com/bayesimpact/bayes-developer-setup/blob/HEAD/gitlab-cli.md')
         self.client = gitlab.Gitlab.from_config()
@@ -319,7 +301,7 @@ class _GithubPlatform(_RemoteGitPlatform):
         try:
             subprocess.check_output(['hub', 'browse', '-u'])
         except subprocess.CalledProcessError as error:
-            raise _ScriptError(
+            raise helper.ScriptError(
                 'hub tool is not installed, or wrongly configured.\n'
                 'Please install it with ~/.bayes-developer-setup/install.sh') from error
 
@@ -392,7 +374,8 @@ class _GithubPlatform(_RemoteGitPlatform):
 def _get_platform() -> _RemoteGitPlatform:
     """Get the relevant review platform once and for all."""
 
-    return _RemoteGitPlatform.from_url(_run_git(['config', f'remote.{_REMOTE_REPO}.url']))
+    return _RemoteGitPlatform.from_url(
+        helper.run_git(['config', f'remote.{helper.REMOTE_REPO}.url']))
 
 
 # TODO(cyrille): Force to use kwargs, since argparse does not type its output.
@@ -402,26 +385,26 @@ def prepare_push_and_request_review(
     """Prepare a local Change List for review."""
 
     if not username:
-        raise _ScriptError(
+        raise helper.ScriptError(
             'Could not find username, most probably you need to setup an email with:\n'
             '  git config user.email <me@bayesimpact.org>')
     refs = _get_git_branches(username, base)
-    merge_base = _run_git(['merge-base', 'HEAD', f'{_REMOTE_REPO}/{refs.base}'])
+    merge_base = helper.run_git(['merge-base', 'HEAD', f'{helper.REMOTE_REPO}/{refs.base}'])
     if _has_git_diff(merge_base):
         _push(refs, is_forced)
     _get_platform().request_review(refs, reviewers)
     if not is_submit:
         return
-    local_sha = _run_git(['rev-parse', refs.branch])
-    remote_sha = _run_git(['rev-parse', f'{_REMOTE_REPO}/{refs.remote}'])
+    local_sha = helper.run_git(['rev-parse', refs.branch])
+    remote_sha = helper.run_git(['rev-parse', f'{helper.REMOTE_REPO}/{refs.remote}'])
     if local_sha != remote_sha:
-        raise _ScriptError(
+        raise helper.ScriptError(
             'Local branch is not in the same state as remote branch. Not submitting.')
-    _run_git(['submit'], env=dict(os.environ, GIT_SUBMIT_AUTO_MERGE='1'))
+    helper.run_git(['submit'], env=dict(os.environ, GIT_SUBMIT_AUTO_MERGE='1'))
 
 
 def _get_default_username(username: str) -> str:
-    return username or _run_git(['config', 'user.email']).split('@')[0]
+    return username or helper.run_git(['config', 'user.email']).split('@')[0]
 
 
 def _browse_to(branch: str) -> None:
@@ -470,7 +453,7 @@ def main(string_args: Optional[List[str]] = None) -> None:
 if __name__ == '__main__':
     try:
         main()
-    except _ScriptError as error:
+    except helper.ScriptError as error:
         print(error)
         # TODO(cyrille): Make sure that those are distinct.
         sys.exit(hash(error))
