@@ -289,8 +289,12 @@ class _GitlabPlatform(_RemoteGitPlatform):
             -> None:
         users = self._get_reviewers(reviewers)
         if not message:
-            # TODO(cyrille): Update reviewers.
-            raise NotImplementedError('Cannot update an existing review yet.')
+            if not users:
+                return
+            if merge_request := self._get_merge_request(refs.remote, refs.base):
+                merge_request.assignee_ids.extend(users)
+                merge_request.save()
+            return
         title, description = message.split('\n', 1)
         mr_parameters: _GitlabMRRequest = {
             'assignee_ids': users,
@@ -332,12 +336,30 @@ class _GithubPlatform(_RemoteGitPlatform):
             _run_hub(['api', f'/teams/{self.engineers_team_id}/members', '--cache', '600']))
         return {member['login'] for member in members}
 
+    def _add_reviewers(self, refs: _References, reviewers: List[str]) -> None:
+        """Add reviewers to the current Pull Request."""
+
+        if not reviewers:
+            return
+        pull_number = self._get_review_number(refs.remote, refs.base)
+        _run_hub([
+            'api', r'/repos/{owner}/{repo}/pulls/'
+            f'{pull_number}/requested_reviewers',
+            '--input', '-',
+        ], input=json.dumps({'reviewers': reviewers}))
+        _run_hub([
+            'api', r'/repos/{owner}/{repo}/issues/'
+            f'{pull_number}/assignees',
+            '--input', '-',
+        ], input=json.dumps({'assignees': reviewers}))
+
     def _request_review(self, refs: _References, reviewers: List[str], message: Optional[str]) \
             -> None:
         """Ask for review on Github."""
 
         if not message:
-            raise NotImplementedError('Cannot update an existing review yet.')
+            self._add_reviewers(refs, reviewers)
+            return
         command = [
             'hub', 'pull-request',
             '-m', message,
