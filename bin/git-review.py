@@ -361,10 +361,8 @@ def prepare_push_and_request_review(
             '  git config user.email <me@bayesimpact.org>')
     refs = _get_git_branches(username, base)
     merge_base = _run_git(['merge-base', 'HEAD', f'{_REMOTE_REPO}/{refs.base}'])
-    if not _has_git_diff(merge_base):
-        # TODO(cyrille): Update this behavior (depending on base being main or something else).
-        raise _ScriptError('All code on this branch has already been submitted.')
-    _push(refs, is_forced)
+    if _has_git_diff(merge_base):
+        _push(refs, is_forced)
     if not is_forced:
         _request_review(refs, reviewers)
     if not is_submit:
@@ -392,7 +390,6 @@ def main(string_args: Optional[List[str]] = None) -> None:
 
     # TODO(cyrille): Auto-complete.
     parser = argparse.ArgumentParser(description='Start a review for your change list.')
-    # TODO(cyrille): Allow several reviewer arguments.
     parser.add_argument(
         'reviewers',
         help='Github handles of the reviewers you want to assign to your review, '
