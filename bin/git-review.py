@@ -382,8 +382,8 @@ class _GithubPlatform(_RemoteGitPlatform):
 
     def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
         return next((
-            number for pr in _run_hub(['pr', 'list', r'--format=%I:%H:%B%n']).split('\n')
-            for number, head_ref, base_ref in [pr.split(':', 1)]
+            number for pr in _run_hub(['pr', 'list', r'--format=%I#%H#%B%n']).split('\n')
+            for number, head_ref, base_ref in [pr.split('#', 2)]
             if head_ref == branch
             if not base or base_ref == base), None)
 
