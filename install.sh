@@ -109,6 +109,7 @@ if [ "$(uname)" == "Darwin" ] && which -s brew; then
     AUTOCOMPLETE_PATH="$(brew --prefix)/etc/bash_completion.d"
   elif brew list bash-completion@2; then
     AUTOCOMPLETE_PATH="/usr/local/share/bash-completion/completions"
+  fi
 elif [ "$(uname)" == "Linux" ]; then
   AUTOCOMPLETE_PATH="/usr/share/bash-completion/completions"
 fi
@@ -169,4 +170,9 @@ else
 
   AUTOCOMPLETE_PATH="$AUTOCOMPLETE_PATH" ./common-installs/pip_setup.sh
   # TODO(cyrille): Add lint npm packages.
+fi
+
+if hub api /repos/{owner}/{repo} > /dev/null && jq --version > /dev/null; then
+  GITHUB_BAYES_ENGINEERS_ID=$(hub api /orgs/bayesimpact/teams/software-engineers | jq '.id')
+  add_to_shellrc 'Github engineers team' 'export GITHUB_BAYES_ENGINEERS_ID='"$GITHUB_BAYES_ENGINEERS_ID"
 fi

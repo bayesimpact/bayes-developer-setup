@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 import typing
-from typing import Any, List, Optional, TypedDict
+from typing import Any, List, Optional, Set, TypedDict
 import unicodedata
 
 try:
@@ -280,6 +280,9 @@ class _GitlabPlatform(_RemoteGitPlatform):
 
 class _GithubPlatform(_RemoteGitPlatform):
 
+    # If this environment variable is not set, please run ../install.sh.
+    engineers_team_id = os.getenv('GITHUB_BAYES_ENGINEERS_ID')
+
     def __init__(self, project_name: str) -> None:
         super().__init__(project_name)
         try:
@@ -288,6 +291,19 @@ class _GithubPlatform(_RemoteGitPlatform):
             raise _ScriptError(
                 'hub tool is not installed, or wrongly configured.\n'
                 'Please install it with ~/.bayes-developer-setup/install.sh') from error
+
+    @functools.cached_property
+    def engineers(self) -> Set[str]:
+        """Set of Github handles for the engineers."""
+
+        if not self.engineers_team_id:
+            logging.warning(
+                'The engineering team Github ID is not in your environment. '
+                'Please run install.sh.')
+            return set()
+        members = json.loads(
+            _run_hub(['api', f'/teams/{self.engineers_team_id}/members', '--cache', '600']))
+        return {member['login'] for member in members}
 
     def request_review(self, message: str, refs: _References, reviewers: List[str]) -> None:
         """Ask for review on Github."""
@@ -298,7 +314,12 @@ class _GithubPlatform(_RemoteGitPlatform):
             '-h', refs.remote,
             '-b', refs.base]
         if reviewers:
-            command.extend(['-a', ','.join(reviewers), '-r', ','.join(reviewers)])
+            if self.engineers:
+                requested_reviewers = set(reviewers) & self.engineers
+                assignees = set(reviewers) - self.engineers
+            else:
+                assignees = requested_reviewers = set(reviewers)
+            command.extend(['-a', ','.join(assignees), '-r', ','.join(requested_reviewers)])
         output = subprocess.check_output(command, text=True)
         logging.info(output.replace('github.com', 'reviewable.io/reviews').replace('pull/', ''))
 
