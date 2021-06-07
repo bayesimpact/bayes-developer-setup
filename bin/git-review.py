@@ -167,7 +167,7 @@ def _get_best_base_branch(branch: str, default: str) -> Optional[str]:
     """Guess on which branch the changes should be merged."""
 
     remote_branches: Optional[str] = None
-    for sha1 in _run_git(['rev-list', '--max-count=5', branch]).split('\n'):
+    for sha1 in _run_git(['rev-list', '--max-count=5', branch]).split('\n')[1:]:
         if remote_branches := _run_git(
                 ['branch', '-r', '--contains', sha1, '--list', f'{_REMOTE_REPO}/*']):
             break
