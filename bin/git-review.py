@@ -109,7 +109,6 @@ def _get_default() -> str:
         ) from error
 
 
-
 @functools.lru_cache()
 def _get_existing_remote() -> Optional[str]:
     try:
@@ -148,12 +147,13 @@ def _get_git_branches(username: str, base: Optional[str]) -> _References:
     branch = _get_head()
     default = _get_default()
     if branch == default:
-        branch = _create_branch_for_review()
-        if not branch:
+        new_branch = _create_branch_for_review()
+        if not new_branch:
             # List branches in user-preferred order, without the asterisk on current branch.
             all_branches = _run_git(['branch', '--format=%(refname:short)']).split('\n')
             all_branches.remove(default)
             raise _ScriptError('branch required:\n\t%s', '\n\t'.join(all_branches))
+        branch = new_branch
 
     if not base:
         base = _get_best_base_branch(branch, default) or default
@@ -229,9 +229,17 @@ class _RemoteGitPlatform:
             return _GithubPlatform(github_match[1])
         raise NotImplementedError(f'Review platform not recognized. Remote URL is {remote_url}')
 
-    def request_review(self, message: str, refs: _References, reviewers: List[str]) -> None:
+    def request_review(self, refs: _References, reviewers: List[str]) -> None:
         """Ask for a review on the specific platform."""
 
+        message = None if self._has_existing_review(refs) else _make_pr_message(refs, reviewers)
+        self._request_review(refs, reviewers, message)
+
+    def _has_existing_review(self, refs) -> bool:
+        return self._get_review_number(refs.remote) is not None
+
+    def _request_review(self, refs: _References, reviewers: List[str], message: Optional[str]) \
+            -> None:
         raise NotImplementedError('This should never happen')
 
     def get_available_reviewers(self) -> List[str]:
@@ -239,7 +247,7 @@ class _RemoteGitPlatform:
 
         raise NotImplementedError('This should never happen')
 
-    def _get_review_number(self, branch: str) -> Optional[str]:
+    def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
         raise NotImplementedError('This should never happen')
 
     def get_review_url_for(self, branch: Optional[str]) -> str:
@@ -265,20 +273,32 @@ class _GitlabPlatform(_RemoteGitPlatform):
     def _get_reviewers(self, reviewers: List[str]) -> List[int]:
         return [user.id for r in reviewers for user in self.client.users.list(username=r)]
 
-    def _get_review_number(self, branch: str) -> Optional[str]:
-        raise NotImplementedError('Cannot get Merge Request number from Gitlab yet.')
+    def _get_merge_request(self, branch: str, base: Optional[str]) \
+            -> Optional['gitlab.MergeRequest']:
+        return next((
+            mr for mr in self.project.merge_request.list()
+            if mr.source_branch == branch
+            if not base or mr.target_branch == base), None)
 
-    def request_review(self, message: str, refs: _References, reviewers: List[str]) -> None:
+    def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
+        if merge_request := self._get_merge_request(branch, base):
+            return merge_request.number
+        return None
+
+    def _request_review(self, refs: _References, reviewers: List[str], message: Optional[str]) \
+            -> None:
+        users = self._get_reviewers(reviewers)
+        if not message:
+            # TODO(cyrille): Update reviewers.
+            raise NotImplementedError('Cannot update an existing review yet.')
         title, description = message.split('\n', 1)
         mr_parameters: _GitlabMRRequest = {
+            'assignee_ids': users,
             'description': description,
             'source_branch': refs.remote,
             'target_branch': refs.base,
             'title': title,
         }
-        # TODO(cyrille): Allow several reviewers
-        if users := self._get_reviewers(reviewers):
-            mr_parameters['assignee_ids'] = users
         self.project.merge_request.create(mr_parameters)
 
     def get_available_reviewers(self) -> List[str]:
@@ -312,9 +332,12 @@ class _GithubPlatform(_RemoteGitPlatform):
             _run_hub(['api', f'/teams/{self.engineers_team_id}/members', '--cache', '600']))
         return {member['login'] for member in members}
 
-    def request_review(self, message: str, refs: _References, reviewers: List[str]) -> None:
+    def _request_review(self, refs: _References, reviewers: List[str], message: Optional[str]) \
+            -> None:
         """Ask for review on Github."""
 
+        if not message:
+            raise NotImplementedError('Cannot update an existing review yet.')
         command = [
             'hub', 'pull-request',
             '-m', message,
@@ -335,11 +358,12 @@ class _GithubPlatform(_RemoteGitPlatform):
             ['hub', 'api', r'repos/{owner}/{repo}/assignees', '--cache', '600'], text=True))
         return [assignee.get('login', '') for assignee in assignees]
 
-    def _get_review_number(self, branch: str) -> Optional[str]:
+    def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
         return next((
-            number for pr in _run_hub(['pr', 'list', r'--format=%I:%H%n']).split('\n')
-            for number, head_ref in [pr.split(':', 1)]
-            if head_ref == branch), None)
+            number for pr in _run_hub(['pr', 'list', r'--format=%I:%H:%B%n']).split('\n')
+            for number, head_ref, base_ref in [pr.split(':', 1)]
+            if head_ref == branch
+            if not base or base_ref == base), None)
 
 
 @functools.lru_cache()
@@ -347,13 +371,6 @@ def _get_platform() -> _RemoteGitPlatform:
     """Get the relevant review platform once and for all."""
 
     return _RemoteGitPlatform.from_url(_run_git(['config', f'remote.{_REMOTE_REPO}.url']))
-
-
-def _request_review(refs: _References, reviewers: List[str]) -> None:
-    """Ask for review on the relevant Git platform."""
-
-    message = _make_pr_message(refs, reviewers)
-    _get_platform().request_review(message, refs, reviewers)
 
 
 # TODO(cyrille): Force to use kwargs, since argparse does not type its output.
@@ -370,14 +387,14 @@ def prepare_push_and_request_review(
     merge_base = _run_git(['merge-base', 'HEAD', f'{_REMOTE_REPO}/{refs.base}'])
     if _has_git_diff(merge_base):
         _push(refs, is_forced)
-    if not is_forced:
-        _request_review(refs, reviewers)
+    _get_platform().request_review(refs, reviewers)
     if not is_submit:
         return
     local_sha = _run_git(['rev-parse', refs.branch])
     remote_sha = _run_git(['rev-parse', f'{_REMOTE_REPO}/{refs.remote}'])
     if local_sha != remote_sha:
-        raise _ScriptError('Local branch is not in the same state as remote branch. Not submitting.')
+        raise _ScriptError(
+            'Local branch is not in the same state as remote branch. Not submitting.')
     _run_git(['submit'], env=dict(os.environ, GIT_SUBMIT_AUTO_MERGE='1'))
 
 
