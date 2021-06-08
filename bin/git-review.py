@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 import typing
-from typing import Any, List, Optional, Set, TypedDict
+from typing import Any, Callable, Iterable, List, Literal, Optional, Set, Tuple, TypedDict
 import unicodedata
 
 try:
@@ -44,6 +44,10 @@ _GITHUB_URL_REGEX = re.compile(r'^git@github\.com:(.*)\.git')
 _WORD_REGEX = re.compile(r'\w+')
 # Default value for the browse action.
 _BROWSE_CURRENT = '__current__browse__'
+
+# TODO(cyrille): Add blame mode.
+_AutoEnum = Literal['round-robin']
+_AutoEnumValues: Tuple[_AutoEnum, ...] = ('round-robin',)
 
 
 class _GitlabMRRequest(TypedDict, total=False):
@@ -75,6 +79,24 @@ def _has_git_diff(base: str) -> bool:
 # TODO(cyrille): Use wherever applicable.
 def _run_hub(command: List[str], **kwargs: Any) -> str:
     return subprocess.check_output(['hub'] + command, text=True, **kwargs).strip()
+
+
+class _GitConfig:
+
+    @property
+    def recent_reviewers(self) -> List[str]:
+        """List of reviewers, starting with the most recently used ones."""
+
+        return _run_git(['config', '--global', 'review.recent', '--default', '']).split(',')
+
+    @recent_reviewers.setter
+    def recent_reviewers(self, reviewers: List[str]) -> None:
+        """Update the list of most recent reviewers."""
+
+        _run_git(['config', '--global', 'review.recent', ','.join(reviewers)])
+
+
+_GIT_CONFIG = _GitConfig()
 
 
 class _References(typing.NamedTuple):
@@ -229,11 +251,21 @@ class _RemoteGitPlatform:
             return _GithubPlatform(github_match[1])
         raise NotImplementedError(f'Review platform not recognized. Remote URL is {remote_url}')
 
+    @property
+    def engineers(self) -> Set[str]:
+        """List of possible engineer reviewers."""
+
+        return set()
+
     def request_review(self, refs: _References, reviewers: List[str]) -> None:
         """Ask for a review on the specific platform."""
 
         message = None if self._has_existing_review(refs) else _make_pr_message(refs, reviewers)
         self._request_review(refs, reviewers, message)
+        recents = _GIT_CONFIG.recent_reviewers
+        # Remove duplicates while preserving ordering.
+        new_recents = list(dict.fromkeys(reviewers + recents))
+        _GIT_CONFIG.recent_reviewers = new_recents
 
     def _has_existing_review(self, refs) -> bool:
         return self._get_review_number(refs.remote) is not None
@@ -242,7 +274,7 @@ class _RemoteGitPlatform:
             -> None:
         raise NotImplementedError('This should never happen')
 
-    def get_available_reviewers(self) -> List[str]:
+    def get_available_reviewers(self) -> Set[str]:
         """List the possible values for reviewers."""
 
         raise NotImplementedError('This should never happen')
@@ -269,6 +301,13 @@ class _GitlabPlatform(_RemoteGitPlatform):
                 '  https://github.com/bayesimpact/bayes-developer-setup/blob/HEAD/gitlab-cli.md')
         self.client = gitlab.Gitlab.from_config()
         self.project = self.client.projects.get(project_name)
+
+    @property
+    def engineers(self) -> Set[str]:
+        """Set of Gitlab handles for the engineers."""
+
+        logging.warning('No engineers team set-up for Gitlab. Not assigning anyone.')
+        return set()
 
     def _get_reviewers(self, reviewers: List[str]) -> List[int]:
         return [user.id for r in reviewers for user in self.client.users.list(username=r)]
@@ -305,8 +344,8 @@ class _GitlabPlatform(_RemoteGitPlatform):
         }
         self.project.merge_request.create(mr_parameters)
 
-    def get_available_reviewers(self) -> List[str]:
-        return [member.username for member in self.project.members.list()]
+    def get_available_reviewers(self) -> Set[str]:
+        return {member.username for member in self.project.members.list()}
 
 
 class _GithubPlatform(_RemoteGitPlatform):
@@ -324,6 +363,13 @@ class _GithubPlatform(_RemoteGitPlatform):
                 'Please install it with ~/.bayes-developer-setup/install.sh') from error
 
     @functools.cached_property
+    def me(self) -> str:
+        """Github handle of the current user."""
+
+        me_json = json.loads(_run_hub(['api', '/user', '--cache', '86400']))
+        return me_json['login']
+
+    @property
     def engineers(self) -> Set[str]:
         """Set of Github handles for the engineers."""
 
@@ -334,7 +380,7 @@ class _GithubPlatform(_RemoteGitPlatform):
             return set()
         members = json.loads(
             _run_hub(['api', f'/teams/{self.engineers_team_id}/members', '--cache', '600']))
-        return {member['login'] for member in members}
+        return {member['login'] for member in members} - {self.me}
 
     def _add_reviewers(self, refs: _References, reviewers: List[str]) -> None:
         """Add reviewers to the current Pull Request."""
@@ -342,6 +388,7 @@ class _GithubPlatform(_RemoteGitPlatform):
         if not reviewers:
             return
         pull_number = self._get_review_number(refs.remote, refs.base)
+        # TODO(cyrille): Split between eng and non-eng.
         _run_hub([
             'api', r'/repos/{owner}/{repo}/pulls/'
             f'{pull_number}/requested_reviewers',
@@ -375,10 +422,10 @@ class _GithubPlatform(_RemoteGitPlatform):
         output = subprocess.check_output(command, text=True)
         logging.info(output.replace('github.com', 'reviewable.io/reviews').replace('pull/', ''))
 
-    def get_available_reviewers(self) -> List[str]:
+    def get_available_reviewers(self) -> Set[str]:
         assignees = json.loads(subprocess.check_output(
             ['hub', 'api', r'repos/{owner}/{repo}/assignees', '--cache', '600'], text=True))
-        return [assignee.get('login', '') for assignee in assignees]
+        return {assignee.get('login', '') for assignee in assignees} - {'', self.me}
 
     def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
         return next((
@@ -395,10 +442,23 @@ def _get_platform() -> _RemoteGitPlatform:
     return _RemoteGitPlatform.from_url(_run_git(['config', f'remote.{_REMOTE_REPO}.url']))
 
 
+def _get_auto_reviewer(auto: _AutoEnum) -> str:
+    if auto == 'round-robin':
+        available = set(_get_platform().engineers)
+        if not available:
+            raise _ScriptError('Unable to auto-assign a reviewer.')
+        recents = _GIT_CONFIG.recent_reviewers
+        for recent in recents:
+            available = available - {recent}
+            if not available:
+                return recent
+        return next(iter(available))
+
+
 # TODO(cyrille): Force to use kwargs, since argparse does not type its output.
 def prepare_push_and_request_review(
         username: str, base: Optional[str], reviewers: List[str],
-        is_forced: bool, is_submit: bool) -> None:
+        is_forced: bool, is_submit: bool, auto: _AutoEnum) -> None:
     """Prepare a local Change List for review."""
 
     if not username:
@@ -409,6 +469,10 @@ def prepare_push_and_request_review(
     merge_base = _run_git(['merge-base', 'HEAD', f'{_REMOTE_REPO}/{refs.base}'])
     if _has_git_diff(merge_base):
         _push(refs, is_forced)
+    if auto:
+        reviewer = _get_auto_reviewer(auto)
+        logging.info('Sending the review to "%s".', reviewer)
+        reviewers = [reviewer]
     _get_platform().request_review(refs, reviewers)
     if not is_submit:
         return
@@ -435,12 +499,17 @@ def main(string_args: Optional[List[str]] = None) -> None:
     """Parse CLI arguments and run the script."""
 
     # TODO(cyrille): Auto-complete.
+    # TODO(cyrille): Do not auto-complete on mutually exclusive args (reviewers, auto, browse).
     parser = argparse.ArgumentParser(description='Start a review for your change list.')
     parser.add_argument(
         'reviewers',
         help='Github handles of the reviewers you want to assign to your review, '
         'as a comma separated list.', nargs='*',
     ).completer = lambda **kw: _get_platform().get_available_reviewers()
+    parser.add_argument(
+        '-a', '--auto', choices=_AutoEnumValues, help='''
+            Let the program choose an engineer to review for you.''',
+        nargs='?', const=_AutoEnumValues[0])
     parser.add_argument('-f', '--force', action='store_true', help='''
         Forces the push, overwriting any pre-existing remote branch with the prefixed name.
         Also doesn't create the pull/merge request.''')
@@ -464,7 +533,7 @@ def main(string_args: Optional[List[str]] = None) -> None:
         _browse_to(args.browse)
         return
     prepare_push_and_request_review(
-        args.username, args.base, args.reviewers, args.force, args.submit)
+        args.username, args.base, args.reviewers, args.force, args.submit, args.auto)
 
 
 if __name__ == '__main__':
