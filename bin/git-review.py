@@ -39,6 +39,9 @@ _REMOTE_REPO = 'origin'
 # Slugged name for the Bayes Impact Github engineering team.
 _GITHUB_ENG_TEAM_SLUG = 'software-engineers'
 
+_ONE_DAY = 86400
+_TEN_MINUTES = 600
+_ONE_MINUTE = 60
 # Separation regex for a comma separated list.
 _COMMA_SEPARATION_REGEX = re.compile(r'\s*,\s*')
 # Chars we want to avoid in branch names.
@@ -83,9 +86,13 @@ def _has_git_diff(base: str) -> bool:
     return bool(subprocess.run(['git', 'diff', '--quiet', base]).returncode)
 
 
-# TODO(cyrille): Use wherever applicable.
-def _run_hub(command: List[str], **kwargs: Any) -> str:
-    return subprocess.check_output(['hub'] + command, text=True, **kwargs).strip()
+# TODO(cyrille): Use tuples rather than lists.
+def _run_hub(command: List[str], *, cache: Optional[int] = None, **kwargs: Any) -> str:
+    final_command = ['hub'] + command
+    # TODO(cyrille): Add an option to force no-cache.
+    if cache:
+        final_command.extend(['--cache', str(cache)])
+    return subprocess.check_output(final_command, text=True, **kwargs).strip()
 
 
 _GithubAPIReference = TypedDict('_GithubAPIReference', {'ref': str})
@@ -109,7 +116,7 @@ class _GithubPullRequest(typing.NamedTuple):
         """Get all pull requests for the current repository."""
 
         all_prs = typing.cast(List[_GithubAPIPullRequest], json.loads(
-            _run_hub(['api', r'/repos/{owner}/{repo}/pulls', '--cache', '60'])))
+            _run_hub(['api', r'/repos/{owner}/{repo}/pulls'], cache=_ONE_MINUTE)))
         return [
             _GithubPullRequest(
                 pr['head']['ref'], pr['number'],
@@ -305,6 +312,7 @@ class _RemoteGitPlatform:
 
     def get_engineers_team_id(self) -> int:
         """Find an ID that references the engineering team on this platform."""
+
         logging.warning('No engineering team set for this platform')
         return ''
 
@@ -440,18 +448,11 @@ class _GithubPlatform(_RemoteGitPlatform):
     def __init__(self, project_name: str) -> None:
         super().__init__(project_name)
         try:
-            subprocess.check_output(['hub', 'browse', '-u'])
+            _run_hub(['browse', '-u'])
         except subprocess.CalledProcessError as error:
             raise _ScriptError(
                 'hub tool is not installed, or wrongly configured.\n'
                 'Please install it with ~/.bayes-developer-setup/install.sh') from error
-
-    @functools.cached_property
-    def me(self) -> str:
-        """Github handle of the current user."""
-
-        me_json = json.loads(_run_hub(['api', '/user', '--cache', '86400']))
-        return me_json['login']
 
     @property
     def engineers(self) -> Set[str]:
@@ -463,12 +464,12 @@ class _GithubPlatform(_RemoteGitPlatform):
                 'Please run install.sh.')
             return set()
         members = json.loads(
-            _run_hub(['api', f'/teams/{_GIT_CONFIG.engineers_team_id}/members', '--cache', '600']))
-        return {member['login'] for member in members} - {self.me}
+            _run_hub(['api', f'/teams/{_GIT_CONFIG.engineers_team_id}/members'], cache=_ONE_DAY))
+        return {member['login'] for member in members} - {self.username}
 
     def get_engineers_team_id(self) -> int:
-        return json.loads(
-            _run_hub(['api', f'/orgs/bayesimpact/teams/{_GITHUB_ENG_TEAM_SLUG}']))['id']
+        return json.loads(_run_hub(
+            ['api', f'/orgs/bayesimpact/teams/{_GITHUB_ENG_TEAM_SLUG}'], cache=_ONE_DAY))['id']
 
     def _add_label(self, issue_number: str, label: str) -> None:
         _run_hub([
@@ -501,8 +502,8 @@ class _GithubPlatform(_RemoteGitPlatform):
         if not message:
             self._add_reviewers(refs, reviewers)
             return
-        command = [
-            'hub', 'pull-request',
+        hub_command = [
+            'pull-request',
             '-m', message,
             '-h', refs.remote,
             '-b', refs.base]
@@ -512,17 +513,18 @@ class _GithubPlatform(_RemoteGitPlatform):
                 assignees = set(reviewers) - self.engineers
             else:
                 assignees = requested_reviewers = set(reviewers)
-            command.extend(['-a', ','.join(assignees), '-r', ','.join(requested_reviewers)])
-        output = subprocess.check_output(command, text=True)
+            hub_command.extend(['-a', ','.join(assignees), '-r', ','.join(requested_reviewers)])
+        output = _run_hub(hub_command)
         logging.info(output.replace('github.com', 'reviewable.io/reviews').replace('pull/', ''))
 
     def get_available_reviewers(self) -> Set[str]:
-        assignees = json.loads(subprocess.check_output(
-            ['hub', 'api', r'repos/{owner}/{repo}/assignees', '--cache', '600'], text=True))
-        return {assignee.get('login', '') for assignee in assignees} - {'', self.me}
+        assignees = json.loads(_run_hub(
+            ['api', r'repos/{owner}/{repo}/assignees'], cache=_TEN_MINUTES))
+        return {assignee.get('login', '') for assignee in assignees} - {'', self.username}
 
     # TODO(cyrille): Fix this when reviewing a branch with non-default base,
     # and already pushed commit.
+    # TODO(cyrille): Rather use _GithubPullRequest.
     def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
         return next((
             number for pr in _run_hub(['pr', 'list', r'--format=%I#%H#%B%n']).split('\n')
