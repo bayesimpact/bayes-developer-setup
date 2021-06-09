@@ -147,7 +147,7 @@ class _GitConfig:
 
 
 _GIT_CONFIG = _GitConfig()
-print(_GIT_CONFIG.engineers_team_id)
+
 
 class _References(typing.NamedTuple):
     """Simple structure containing all needed branch references."""
