@@ -482,17 +482,18 @@ class _GithubPlatform(_RemoteGitPlatform):
         if not reviewers:
             return
         pull_number = self._get_review_number(refs.remote, refs.base)
-        # TODO(cyrille): Split between eng and non-eng.
+        requested_reviewers = set(reviewers) & self.engineers
+        assignees = set(reviewers) - self.engineers
         _run_hub([
             'api', r'/repos/{owner}/{repo}/pulls/'
             f'{pull_number}/requested_reviewers',
             '--input', '-',
-        ], input=json.dumps({'reviewers': reviewers}))
+        ], input=json.dumps({'reviewers': requested_reviewers}))
         _run_hub([
             'api', r'/repos/{owner}/{repo}/issues/'
             f'{pull_number}/assignees',
             '--input', '-',
-        ], input=json.dumps({'assignees': reviewers}))
+        ], input=json.dumps({'assignees': assignees}))
 
     def _request_review(self, refs: _References, reviewers: List[str], message: Optional[str]) \
             -> None:
