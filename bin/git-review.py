@@ -374,7 +374,7 @@ class _RemoteGitPlatform:
         number = None if not branch else self._get_review_number(branch)
         if not number:
             raise _ScriptError('No opened review for branch "%s".', branch)
-        return f'https://reviewable.io/reviews/{self.project_name}/{number:d}'
+        return f'https://reviewable.io/reviews/{self.project_name}/{number}'
 
     def get_available_reviews(self) -> List[str]:
         """List branches the user should review."""
