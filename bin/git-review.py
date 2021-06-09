@@ -93,12 +93,14 @@ _GithubAPIUser = TypedDict('_GithubAPIUser', {'login': str})
 
 
 class _GithubAPIPullRequest(TypedDict, total=False):
+    base: _GithubAPIReference
     head: _GithubAPIReference
     number: int
     requested_reviewers: List[_GithubAPIUser]
 
 
 class _GithubPullRequest(typing.NamedTuple):
+    base: str
     head: str
     number: int
     reviewers: Set[str]
@@ -112,7 +114,7 @@ class _GithubPullRequest(typing.NamedTuple):
             _run_hub(['api', r'/repos/{owner}/{repo}/pulls', '--cache', '60'])))
         return [
             _GithubPullRequest(
-                pr['head']['ref'], pr['number'],
+                pr['base']['ref'], pr['head']['ref'], pr['number'],
                 {rev['login'] for rev in pr['requested_reviewers']})
             for pr in all_prs]
 
@@ -525,10 +527,9 @@ class _GithubPlatform(_RemoteGitPlatform):
     # and already pushed commit.
     def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
         return next((
-            number for pr in _run_hub(['pr', 'list', r'--format=%I#%H#%B%n']).split('\n')
-            for number, head_ref, base_ref in [pr.split('#', 2)]
-            if head_ref == branch
-            if not base or base_ref == base), None)
+            pr.number for pr in _GithubPullRequest.fetch_all()
+            if pr.head == branch
+            if not base or pr.base == base), None)
 
     @functools.cached_property
     def username(self) -> str:
