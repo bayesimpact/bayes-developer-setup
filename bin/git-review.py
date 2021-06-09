@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 import typing
-from typing import Any, List, Optional, Set, TypedDict
+from typing import Any, List, NoReturn, Optional, Set, TypedDict
 import unicodedata
 
 try:
@@ -31,6 +31,8 @@ try:
 except ImportError:
     # This is not needed when pushing to a Github repo.
     gitlab = None
+
+# TODO(cyrille): Lint, type and test.
 
 # Name of the remote to which the script pushes.
 _REMOTE_REPO = 'origin'
@@ -216,6 +218,8 @@ def _run_git_review_hook(branch: str, remote_branch: str, reviewers: List[str]) 
 
 class _RemoteGitPlatform:
 
+    _platform: str
+
     def __init__(self, project_name: str) -> None:
         self.project_name = project_name
 
@@ -238,17 +242,21 @@ class _RemoteGitPlatform:
     def _has_existing_review(self, refs) -> bool:
         return self._get_review_number(refs.remote) is not None
 
+    def _not_implemented(self, command: str, context: str = '') -> NoReturn:
+        raise NotImplementedError(
+            f'`{command}`{context} is not implemented for {self._platform} yet.')
+
     def _request_review(self, refs: _References, reviewers: List[str], message: Optional[str]) \
             -> None:
-        raise NotImplementedError('This should never happen')
+        self._not_implemented('git review')
 
     def get_available_reviewers(self) -> List[str]:
         """List the possible values for reviewers."""
 
-        raise NotImplementedError('This should never happen')
+        self._not_implemented('git review', ' autocomplete')
 
     def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
-        raise NotImplementedError('This should never happen')
+        self._not_implemented('git review --browse')
 
     def get_review_url_for(self, branch: Optional[str]) -> str:
         """Give the URL where one can review the code on the given branch."""
@@ -260,6 +268,8 @@ class _RemoteGitPlatform:
 
 
 class _GitlabPlatform(_RemoteGitPlatform):
+
+    _platform = 'Gitlab'
 
     def __init__(self, project_name: str) -> None:
         super().__init__(project_name)
@@ -311,6 +321,7 @@ class _GitlabPlatform(_RemoteGitPlatform):
 
 class _GithubPlatform(_RemoteGitPlatform):
 
+    _platform = 'Github'
     # If this environment variable is not set, please run ../install.sh.
     engineers_team_id = os.getenv('GITHUB_BAYES_ENGINEERS_ID')
 
@@ -454,7 +465,9 @@ def main(string_args: Optional[List[str]] = None) -> None:
         Force the pull/merge request to be based on the given base branch on the remote.''')
     # TODO(cyrille): Add completion with pending requests.
     parser.add_argument(
-        '--browse', help='''Open the review in a browser window.''',
+        '--browse', help='''
+        Open the review in a browser window.
+        Defaults to the remote branch attached to the current branch.''',
         nargs='?', const=_BROWSE_CURRENT)
     argcomplete.autocomplete(parser)
     args = parser.parse_args(string_args)
