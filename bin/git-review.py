@@ -614,8 +614,7 @@ def main(string_args: Optional[List[str]] = None) -> None:
     parser = argparse.ArgumentParser(description='Start a review for your change list.')
     parser.add_argument(
         'reviewers',
-        help='Github handles of the reviewers you want to assign to your review, '
-        'as a comma separated list.', nargs='*',
+        help='Github handles of the reviewers you want to assign to your review.', nargs='*',
     ).completer = lambda **kw: _get_platform().get_available_reviewers()
     parser.add_argument(
         '-a', '--auto', choices=_AutoEnumValues, help='''
