@@ -357,7 +357,7 @@ class _RemoteGitPlatform:
 
         self._not_implemented('git review', ' autocomplete')
 
-    def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
+    def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[int]:
         self._not_implemented('git review --browse')
 
     def get_review_url_for(self, branch: Optional[str]) -> str:
@@ -404,7 +404,7 @@ class _GitlabPlatform(_RemoteGitPlatform):
             if mr.source_branch == branch
             if not base or mr.target_branch == base), None)
 
-    def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
+    def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[int]:
         if merge_request := self._get_merge_request(branch, base):
             return merge_request.number
         return None
@@ -523,9 +523,9 @@ class _GithubPlatform(_RemoteGitPlatform):
 
     # TODO(cyrille): Fix this when reviewing a branch with non-default base,
     # and already pushed commit.
-    def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
+    def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[int]:
         return next((
-            number for pr in _run_hub(['pr', 'list', r'--format=%I#%H#%B%n']).split('\n')
+            int(number) for pr in _run_hub(['pr', 'list', r'--format=%I#%H#%B%n']).split('\n')
             for number, head_ref, base_ref in [pr.split('#', 2)]
             if head_ref == branch
             if not base or base_ref == base), None)
