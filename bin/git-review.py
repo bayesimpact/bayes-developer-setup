@@ -59,6 +59,8 @@ _BROWSE_CURRENT = '__current__browse__'
 _AutoEnum = Literal['round-robin']
 _AutoEnumValues: Tuple[_AutoEnum, ...] = ('round-robin',)
 
+_CACHE_BUSTER: List[str] = []
+
 
 class _GitlabMRRequest(TypedDict, total=False):
     description: str
@@ -89,8 +91,7 @@ def _has_git_diff(base: str) -> bool:
 # TODO(cyrille): Use tuples rather than lists.
 def _run_hub(command: List[str], *, cache: Optional[int] = None, **kwargs: Any) -> str:
     final_command = ['hub'] + command
-    # TODO(cyrille): Add an option to force no-cache.
-    if cache:
+    if cache and not _CACHE_BUSTER:
         final_command.extend(['--cache', str(cache)])
     return subprocess.check_output(final_command, text=True, **kwargs).strip()
 
@@ -633,6 +634,8 @@ def main(string_args: Optional[List[str]] = None) -> None:
     # TODO(cyrille): Auto-complete.
     parser.add_argument('-b', '--base', help='''
         Force the pull/merge request to be based on the given base branch on the remote.''')
+    parser.add_argument('--no-cache', dest='cache', action='store_false', help='''
+        Clear the cache mechanism on hub API calls.''')
     parser.add_argument(
         '--browse', help='''
         Open the review in a browser window.
@@ -644,6 +647,8 @@ def main(string_args: Optional[List[str]] = None) -> None:
     args = parser.parse_args(string_args)
     # TODO(cyrille): Update log level depending on required verbosity.
     logging.basicConfig(level=logging.INFO)
+    if not args.cache:
+        _CACHE_BUSTER.append('busted')
     if args.browse:
         _browse_to(args.browse)
         return
