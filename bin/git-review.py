@@ -637,7 +637,8 @@ def main(string_args: Optional[List[str]] = None) -> None:
         Defaults to the remote branch attached to the current branch.''',
         nargs='?', const=_BROWSE_CURRENT,
     ).completer = lambda **kw: _get_platform().get_available_reviews()
-    argcomplete.autocomplete(parser)
+    if argcomplete:
+        argcomplete.autocomplete(parser)
     args = parser.parse_args(string_args)
     # TODO(cyrille): Update log level depending on required verbosity.
     logging.basicConfig(level=logging.INFO)
