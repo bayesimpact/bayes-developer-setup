@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 import typing
-from typing import Any, Callable, Iterable, List, Literal, NoReturn, Optional, Set, Tuple, TypedDict
+from typing import Any, List, Literal, NoReturn, Optional, Set, Tuple, TypedDict
 import unicodedata
 
 try:
@@ -36,6 +36,9 @@ except ImportError:
 
 # Name of the remote to which the script pushes.
 _REMOTE_REPO = 'origin'
+# Slugged name for the Bayes Impact Github engineering team.
+_GITHUB_ENG_TEAM_SLUG = 'software-engineers'
+
 # Separation regex for a comma separated list.
 _COMMA_SEPARATION_REGEX = re.compile(r'\s*,\s*')
 # Chars we want to avoid in branch names.
@@ -117,6 +120,20 @@ class _GithubPullRequest(typing.NamedTuple):
 class _GitConfig:
 
     @property
+    def engineers_team_id(self) -> str:
+        """ID for the engineers team."""
+
+        value = _run_git(['config', 'review.engineers', '--default', ''])
+        if not value:
+            value = str(_get_platform().get_engineers_team_id())
+            self.engineers_team_id = value
+        return value
+
+    @engineers_team_id.setter
+    def engineers_team_id(self, value: str) -> None:
+        _run_git(['config', 'review.engineers', value])
+
+    @property
     def recent_reviewers(self) -> List[str]:
         """List of reviewers, starting with the most recently used ones."""
 
@@ -130,7 +147,7 @@ class _GitConfig:
 
 
 _GIT_CONFIG = _GitConfig()
-
+print(_GIT_CONFIG.engineers_team_id)
 
 class _References(typing.NamedTuple):
     """Simple structure containing all needed branch references."""
@@ -286,6 +303,11 @@ class _RemoteGitPlatform:
             return _GithubPlatform(github_match[1])
         raise NotImplementedError(f'Review platform not recognized. Remote URL is {remote_url}')
 
+    def get_engineers_team_id(self) -> int:
+        """Find an ID that references the engineering team on this platform."""
+        logging.warning('No engineering team set for this platform')
+        return ''
+
     @property
     def engineers(self) -> Set[str]:
         """List of possible engineer reviewers."""
@@ -414,8 +436,6 @@ class _GitlabPlatform(_RemoteGitPlatform):
 class _GithubPlatform(_RemoteGitPlatform):
 
     _platform = 'Github'
-    # If this environment variable is not set, please run ../install.sh.
-    engineers_team_id = os.getenv('GITHUB_BAYES_ENGINEERS_ID')
 
     def __init__(self, project_name: str) -> None:
         super().__init__(project_name)
@@ -437,14 +457,18 @@ class _GithubPlatform(_RemoteGitPlatform):
     def engineers(self) -> Set[str]:
         """Set of Github handles for the engineers."""
 
-        if not self.engineers_team_id:
+        if not _GIT_CONFIG.engineers_team_id:
             logging.warning(
                 'The engineering team Github ID is not in your environment. '
                 'Please run install.sh.')
             return set()
         members = json.loads(
-            _run_hub(['api', f'/teams/{self.engineers_team_id}/members', '--cache', '600']))
+            _run_hub(['api', f'/teams/{_GIT_CONFIG.engineers_team_id}/members', '--cache', '600']))
         return {member['login'] for member in members} - {self.me}
+
+    def get_engineers_team_id(self) -> int:
+        return json.loads(
+            _run_hub(['api', f'/orgs/bayesimpact/teams/{_GITHUB_ENG_TEAM_SLUG}']))['id']
 
     def _add_label(self, issue_number: str, label: str) -> None:
         _run_hub([
@@ -497,6 +521,8 @@ class _GithubPlatform(_RemoteGitPlatform):
             ['hub', 'api', r'repos/{owner}/{repo}/assignees', '--cache', '600'], text=True))
         return {assignee.get('login', '') for assignee in assignees} - {'', self.me}
 
+    # TODO(cyrille): Fix this when reviewing a branch with non-default base,
+    # and already pushed commit.
     def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
         return next((
             number for pr in _run_hub(['pr', 'list', r'--format=%I#%H#%B%n']).split('\n')

@@ -171,8 +171,3 @@ else
   AUTOCOMPLETE_PATH="$AUTOCOMPLETE_PATH" ./common-installs/pip_setup.sh
   # TODO(cyrille): Add lint npm packages.
 fi
-
-if hub api /repos/{owner}/{repo} > /dev/null && jq --version > /dev/null; then
-  GITHUB_BAYES_ENGINEERS_ID=$(hub api /orgs/bayesimpact/teams/software-engineers | jq '.id')
-  add_to_shellrc 'Github engineers team' 'export GITHUB_BAYES_ENGINEERS_ID='"$GITHUB_BAYES_ENGINEERS_ID"
-fi
