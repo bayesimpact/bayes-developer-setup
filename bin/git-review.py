@@ -327,10 +327,10 @@ class _RemoteGitPlatform:
 
         message = None if self._has_existing_review(refs) else _make_pr_message(refs, reviewers)
         self._request_review(refs, reviewers, message)
-        recents = _GIT_CONFIG.recent_reviewers
-        # Remove duplicates while preserving ordering.
-        new_recents = list(dict.fromkeys(reviewers + recents))
-        _GIT_CONFIG.recent_reviewers = new_recents
+        if reviewers:
+            # Remove duplicates while preserving ordering.
+            recents = list(dict.fromkeys(reviewers + _GIT_CONFIG.recent_reviewers))
+            _GIT_CONFIG.recent_reviewers = recents
         self.add_review_label(refs.branch)
 
     def add_review_label(self, branch: str) -> None:
