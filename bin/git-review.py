@@ -34,6 +34,8 @@ except ImportError:
 
 # Name of the remote to which the script pushes.
 _REMOTE_REPO = 'origin'
+# Separation regex for a comma separated list.
+_COMMA_SEPARATION_REGEX = re.compile(r'\s*,\s*')
 # Chars we want to avoid in branch names.
 _FORBIDDEN_CHARS_REGEX = re.compile(r'[#\u0300-\u036f]')
 # Remote URL pattern for Gitlab repos.
@@ -234,6 +236,23 @@ class _RemoteGitPlatform:
 
         message = None if self._has_existing_review(refs) else _make_pr_message(refs, reviewers)
         self._request_review(refs, reviewers, message)
+        self.add_review_label(refs.branch)
+
+    def add_review_label(self, branch: str) -> None:
+        """Mark all references issues as 'in review'."""
+
+        commit_msg = _run_git(['log', branch, '-1', r'--format=%B'])
+        issues = {
+            issue.lstrip('#')
+            for line in commit_msg.split('\n')
+            if line.startswith('Fix ')
+            for issue in _COMMA_SEPARATION_REGEX.split(line[len('Fix '):])
+            if issue.startswith('#')}
+        for issue in issues:
+            self._add_label(issue, '[zube]: In Review')
+
+    def _add_label(self, issue_number: str, label: str) -> None:
+        raise NotImplementedError('This should never happen')
 
     def _has_existing_review(self, refs) -> bool:
         return self._get_review_number(refs.remote) is not None
@@ -335,6 +354,12 @@ class _GithubPlatform(_RemoteGitPlatform):
         members = json.loads(
             _run_hub(['api', f'/teams/{self.engineers_team_id}/members', '--cache', '600']))
         return {member['login'] for member in members}
+
+    def _add_label(self, issue_number: str, label: str) -> None:
+        _run_hub([
+            'api', r'/repos/{owner}/{repo}/issues/'
+            f'{issue_number}/labels', '--input', '-',
+        ], input=json.dumps({'labels': [label]}))
 
     def _add_reviewers(self, refs: _References, reviewers: List[str]) -> None:
         """Add reviewers to the current Pull Request."""
