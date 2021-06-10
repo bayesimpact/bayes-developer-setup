@@ -229,6 +229,7 @@ def _get_git_branches(username: str, base: Optional[str]) -> _References:
     branch = _get_head()
     default = _get_default()
     if branch == default:
+        # TODO(cyrille): Add --new for side branches too.
         new_branch = _create_branch_for_review()
         if not new_branch:
             # List branches in user-preferred order, without the asterisk on current branch.
@@ -528,10 +529,9 @@ class _GithubPlatform(_RemoteGitPlatform):
 
     # TODO(cyrille): Fix this when reviewing a branch with non-default base,
     # and already pushed commit.
-    # TODO(cyrille): Rather use _GithubPullRequest.
     def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
         return next((
-            pr.number for pr in _GithubPullRequest.fetch_all()
+            str(pr.number) for pr in _GithubPullRequest.fetch_all()
             if pr.head == branch
             if not base or pr.base == base), None)
 
@@ -573,7 +573,7 @@ def _get_auto_reviewer(auto: _AutoEnum) -> str:
 # TODO(cyrille): Force to use kwargs, since argparse does not type its output.
 def prepare_push_and_request_review(
         username: str, base: Optional[str], reviewers: List[str],
-        is_forced: bool, is_submit: bool, auto: _AutoEnum) -> None:
+        is_submit: bool, auto: _AutoEnum) -> None:
     """Prepare a local Change List for review."""
 
     if not username:
@@ -583,7 +583,7 @@ def prepare_push_and_request_review(
     refs = _get_git_branches(username, base)
     merge_base = _run_git(['merge-base', 'HEAD', f'{_REMOTE_REPO}/{refs.base}'])
     if _has_git_diff(merge_base):
-        _push(refs, is_forced)
+        _push(refs, _get_existing_remote() == refs.remote)
     if auto:
         reviewer = _get_auto_reviewer(auto)
         logging.info('Sending the review to "%s".', reviewer)
@@ -623,9 +623,10 @@ def main(string_args: Optional[List[str]] = None) -> None:
         '-a', '--auto', choices=_AutoEnumValues, help='''
             Let the program choose an engineer to review for you.''',
         nargs='?', const=_AutoEnumValues[0])
-    parser.add_argument('-f', '--force', action='store_true', help='''
-        Forces the push, overwriting any pre-existing remote branch with the prefixed name.
-        Also doesn't create the pull/merge request.''')
+    parser.add_argument(
+        '-f', '--force', action='store_true', help='''
+            [DEPRECATED]: The script now determines whether the push should be forced or not.''',
+    ).completer = argcomplete and argcomplete.SuppressCompleter()
     parser.add_argument('-s', '--submit', action='store_true', help='''
         Ask GitHub to auto-merge the branch, when all conditions are satisfied.
         Runs 'git submit'.''')
@@ -650,11 +651,15 @@ def main(string_args: Optional[List[str]] = None) -> None:
     logging.basicConfig(level=logging.INFO)
     if not args.cache:
         _CACHE_BUSTER.append('busted')
+    if args.force:
+        logging.warning(
+            'The --force (-f) option is now deprecated. '
+            'The force option of the push is now determined by the current git state.')
     if args.browse:
         _browse_to(args.browse)
         return
     prepare_push_and_request_review(
-        args.username, args.base, args.reviewers, args.force, args.submit, args.auto)
+        args.username, args.base, args.reviewers, args.submit, args.auto)
 
 
 if __name__ == '__main__':
