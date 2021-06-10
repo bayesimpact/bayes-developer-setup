@@ -189,7 +189,8 @@ if [ -z "$ABORT_SUBMIT" ] && ! git rev-parse --verify "${BRANCH}" 2>&1 > /dev/nu
 fi
 
 function get_pr_info {
-  local repo_info="$(hub api graphql -F query='
+  local repo_info="$(hub api graphql -H 'Accept: application/vnd.github.merge-info-preview+json' \
+    -F query='
     query IsAutoMergeable($headRefName: String!) {
       repository(name: "{repo}", owner: "{owner}") {
         deleteBranchOnMerge
@@ -198,6 +199,7 @@ function get_pr_info {
           nodes {
             id
             number
+            mergeStateStatus
             viewerCanEnableAutoMerge
             viewerCanDisableAutoMerge
             autoMergeRequest {enabledAt}
@@ -221,6 +223,7 @@ function get_pr_info {
   fi
   if [[ $GIT_SUBMIT_AUTO_MERGE == 1 ]] &&
     jq -e '.pullRequests.nodes[0] | (
+      .mergeStateStatus == "CLEAN" or
       .viewerCanEnableAutoMerge or
       .viewerCanDisableAutoMerge
     ) | not' <<< "$repo_info" > /dev/null; then
