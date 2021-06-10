@@ -528,10 +528,9 @@ class _GithubPlatform(_RemoteGitPlatform):
 
     # TODO(cyrille): Fix this when reviewing a branch with non-default base,
     # and already pushed commit.
-    # TODO(cyrille): Rather use _GithubPullRequest.
     def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
         return next((
-            pr.number for pr in _GithubPullRequest.fetch_all()
+            str(pr.number) for pr in _GithubPullRequest.fetch_all()
             if pr.head == branch
             if not base or pr.base == base), None)
 
