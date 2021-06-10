@@ -493,12 +493,12 @@ class _GithubPlatform(_RemoteGitPlatform):
             'api', r'/repos/{owner}/{repo}/pulls/'
             f'{pull_number}/requested_reviewers',
             '--input', '-',
-        ], input=json.dumps({'reviewers': requested_reviewers}))
+        ], input=json.dumps({'reviewers': list(requested_reviewers)}))
         _run_hub([
             'api', r'/repos/{owner}/{repo}/issues/'
             f'{pull_number}/assignees',
             '--input', '-',
-        ], input=json.dumps({'assignees': assignees}))
+        ], input=json.dumps({'assignees': list(assignees)}))
 
     def _request_review(self, refs: _References, reviewers: List[str], message: Optional[str]) \
             -> None:
