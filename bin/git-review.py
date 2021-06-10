@@ -133,7 +133,7 @@ class _GitConfig:
     def engineers_team_id(self) -> str:
         """ID for the engineers team."""
 
-        value = _run_git(['config', 'review.engineers', '--default', ''])
+        value = _run_git(['config', '--default', '', '--get', 'review.engineers'])
         if not value:
             value = str(_get_platform().get_engineers_team_id())
             self.engineers_team_id = value
@@ -141,19 +141,21 @@ class _GitConfig:
 
     @engineers_team_id.setter
     def engineers_team_id(self, value: str) -> None:
-        _run_git(['config', 'review.engineers', value])
+        _run_git(['config', '--set', 'review.engineers', value])
 
     @property
     def recent_reviewers(self) -> List[str]:
         """List of reviewers, starting with the most recently used ones."""
 
-        return _run_git(['config', '--global', 'review.recent', '--default', '']).split(',')
+        return _run_git([
+            'config', '--global', '--default', '', '--get', 'review.recent']).split(',')
 
     @recent_reviewers.setter
     def recent_reviewers(self, reviewers: List[str]) -> None:
         """Update the list of most recent reviewers."""
 
-        _run_git(['config', '--global', 'review.recent', ','.join(reviewers)])
+        _run_git([
+            'config', '--global', '--set', 'review.recent', ','.join(r for r in reviewers if r)])
 
 
 _GIT_CONFIG = _GitConfig()
