@@ -141,7 +141,7 @@ class _GitConfig:
 
     @engineers_team_id.setter
     def engineers_team_id(self, value: str) -> None:
-        _run_git(['config', '--set', 'review.engineers', value])
+        _run_git(['config', 'review.engineers', value])
 
     @property
     def recent_reviewers(self) -> List[str]:
@@ -155,7 +155,7 @@ class _GitConfig:
         """Update the list of most recent reviewers."""
 
         _run_git([
-            'config', '--global', '--set', 'review.recent', ','.join(r for r in reviewers if r)])
+            'config', '--global', 'review.recent', ','.join(r for r in reviewers if r)])
 
 
 _GIT_CONFIG = _GitConfig()
