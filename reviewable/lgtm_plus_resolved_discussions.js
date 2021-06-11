@@ -16,7 +16,7 @@ const descriptions = []
 // Approval by username
 const approvals = []
 _.each(_.sortBy(review.sentiments, 'timestamp'), function(sentiment) {
-  const emojis = _.keyBy(sentiment.emojis)
+  const emojis = _.indexBy(sentiment.emojis)
   if (emojis.lgtm || emojis.lgtm_strong) {
     approvals.push(sentiment.username)
   }
