@@ -154,8 +154,7 @@ if [[ "$-" != "${-#*i}" ]]; then
 else
   # Check if the user is logged in.
   echo "Checking hub setup."
-  hub ci-status
-  if [ "$(hub ci-status)" == "success" ]; then
+  if hub browse -u < /dev/null; then
     echo "Hub is setup successfully.";
   else
     echo "Make sure you are signed into hub.";

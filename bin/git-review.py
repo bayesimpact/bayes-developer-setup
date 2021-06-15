@@ -269,8 +269,6 @@ class _GitConfig:
     def lucca_session(self) -> Optional['LuccaSession']:
         """Value for a valid token for Lucca API."""
 
-        if _GIT_CONFIG.get_config('review.lucca.enabled') != 'true':
-            return None
         if not requests or not LuccaSession:
             if not os.getenv('GIT_REVIEW_DISABLE_REQUESTS_WARNING'):
                 logging.warning(
