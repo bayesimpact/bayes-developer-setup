@@ -240,15 +240,15 @@ def _get_git_branches(username: str, base: Optional[str]) -> _References:
             raise _ScriptError('branch required:\n\t%s', '\n\t'.join(all_branches))
         branch = new_branch
 
-    if not base:
-        base = _get_best_base_branch(branch, default) or default
-
     remote_branch = _get_existing_remote() or _cleanup_branch_name(f'{username}-{branch}')
+
+    if not base:
+        base = _get_best_base_branch(branch, remote_branch, default) or default
 
     return _References(default, branch, remote_branch, base)
 
 
-def _get_best_base_branch(branch: str, default: str) -> Optional[str]:
+def _get_best_base_branch(branch: str, remote: str, default: str) -> Optional[str]:
     """Guess on which branch the changes should be merged."""
 
     remote_branches: Optional[str] = None
@@ -260,7 +260,11 @@ def _get_best_base_branch(branch: str, default: str) -> Optional[str]:
         return None
     if any(rb.endswith(f'/{default}') for rb in remote_branches.split('\n')):
         return None
-    return remote_branches.split('\n')[0].rsplit('/', 1)[-1]
+    for remote_branch in remote_branches.split('\n'):
+        base = remote_branch.rsplit('/', 1)[-1]
+        if base != remote:
+            return base
+    return None
 
 
 def _cleanup_branch_name(branch: str) -> str:
@@ -529,8 +533,6 @@ class _GithubPlatform(_RemoteGitPlatform):
             ['api', r'repos/{owner}/{repo}/assignees'], cache=_TEN_MINUTES))
         return {assignee.get('login', '') for assignee in assignees} - {'', self.username}
 
-    # TODO(cyrille): Fix this when reviewing a branch with non-default base,
-    # and already pushed commit.
     def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
         return next((
             str(pr.number) for pr in _GithubPullRequest.fetch_all()
