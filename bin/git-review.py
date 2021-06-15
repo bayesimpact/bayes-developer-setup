@@ -21,15 +21,55 @@ import subprocess
 import sys
 import time
 import typing
-from typing import Any, Callable, List, Literal, NoReturn, Optional, Set, Tuple, TypedDict
+from typing import Any, Callable, Dict, List, Literal, NoReturn, Optional, Set, Tuple, TypedDict
 import unicodedata
 
 try:
     import requests
     from requests import exceptions
+
+    class LuccaSession(requests.Session):
+        """A connected session to the Lucca API."""
+
+        def __init__(
+                self, base_url: str, token: Optional[str], *,
+                on_refresh: Callable[['LuccaSession'], None]) -> None:
+            super().__init__()
+            self._base_url = base_url
+            if token:
+                self.cookies.set('authToken', token)
+            self._on_refresh = on_refresh
+
+        def get(self, url: str, *args: Any, **kwargs: Any) -> requests.Response:
+            url = f'{self._base_url}/{url}'
+            try:
+                response = super().get(url, *args, **kwargs)
+                response.raise_for_status()
+                return response
+            except exceptions.HTTPError:
+                LoginHTMLParser('identity/login', self).\
+                    get_token(input('Lucca login:'), getpass.getpass())
+                self._on_refresh(self)
+            return super().get(url, *args, **kwargs)
+
+        def get_today_ooos(self) -> Set[str]:
+            """List the email addresses of people being OoO this half-day."""
+
+            today = datetime.datetime.now()
+            day = today.date().isoformat()
+            is_am = today.hour <= 12
+            response = self.get('api/v3/leaves', params={
+                'date': day,
+                'fields': 'leavePeriod[owner[mail]]',
+                'isAM': is_am,
+                'leavePeriod.owner.departmentId': 1,
+            })
+            response.raise_for_status()
+            return {
+                item['leavePeriod']['owner']['mail'] for item in response.json()['data']['items']}
 except ImportError:
     requests = None
-    exceptions = None
+    LuccaSession = None  # pylint: disable=invalid-name
 try:
     import argcomplete
 except ImportError:
@@ -136,6 +176,42 @@ class _GithubPullRequest(typing.NamedTuple):
             for pr in all_prs]
 
 
+class LoginHTMLParser(parser.HTMLParser):
+    """Parse the login HTML page, and fill its form with login info to get an auth token."""
+
+    def __init__(self, login_url: str, session: 'requests.Session') -> None:
+        super().__init__()
+        self._login_url = login_url
+        self._in_form = False
+        self._form: Dict[str, str] = {}
+        self._session = session
+        self.feed(self._session.get(login_url).text)
+
+    def handle_starttag(self, tag, attrs) -> None:
+        if tag == 'form':
+            self._in_form = True
+            return
+        if tag == 'input' and self._in_form:
+            attr_dict = dict(attrs)
+            if 'name' in attr_dict and 'value' in attr_dict:
+                self._form[attr_dict['name']] = attr_dict['value']
+
+    def handle_endtag(self, tag) -> None:
+        if tag == 'form':
+            self._in_form = False
+
+    def get_token(self, username: str, password: str) -> str:
+        """Get token from login information."""
+
+        if not self._form:
+            raise ValueError(f"The parsed HTML at {self._login_url} didn't contain a useful form")
+        response = self._session.post(
+            'https://bayesimpact.ilucca.net/identity/login',
+            data=dict(self._form, UserName=username, Password=password, IsPersistent=True))
+        response.raise_for_status()
+        return self._session.cookies.get('authToken')
+
+
 class _GitConfig:
 
     def get_config(self, key: str, *, is_global: bool = False) -> str:
@@ -174,6 +250,44 @@ class _GitConfig:
         """Update the list of most recent reviewers."""
 
         self.set_config('review.recent', ','.join(r for r in reviewers if r), is_global=True)
+
+    @property
+    def lucca_url(self) -> str:
+        """A base URL for Lucca API."""
+
+        value = self.get_config('review.lucca.url', is_global=True)
+        if not value:
+            value = 'https://bayesimpact.ilucca.net'
+            self.lucca_url = value
+        return value
+
+    @lucca_url.setter
+    def lucca_url(self, url: str) -> None:
+        self.set_config('review.lucca.url', url, is_global=True)
+
+    @property
+    def lucca_session(self) -> Optional['LuccaSession']:
+        """Value for a valid token for Lucca API."""
+
+        if not requests or not LuccaSession:
+            if not os.getenv('GIT_REVIEW_DISABLE_REQUESTS_WARNING'):
+                logging.warning(
+                    'Install requests if you want to link your reviews to Lucca.\n'
+                    'You can disable this warning by setting GIT_REVIEW_DISABLE_REQUESTS_WARNING=1')
+            return None
+        base_url = self.lucca_url
+        if not base_url:
+            return None
+        token = self.get_config('review.lucca.token', is_global=True)
+        session = LuccaSession(
+            base_url, token, on_refresh=lambda s: setattr(self, 'lucca_session', s))
+        return session
+
+    @lucca_session.setter
+    def lucca_session(self, value: 'LuccaSession') -> None:
+        """Update the saved Lucca token."""
+
+        self.set_config('review.lucca.token', value.cookies.get('authToken'), is_global=True)
 
 
 _GIT_CONFIG = _GitConfig()
@@ -585,9 +699,24 @@ def _ask_for_email(potential: str) -> str:
     return potential_email
 
 
+def _remove_absents(available: Set[str]) -> Set[str]:
+    absents: Set[str] = set()
+    if session := _GIT_CONFIG.lucca_session:
+        absents = session.get_today_ooos()
+    if not absents:
+        return available
+    for potential in set(available):
+        potential_email = _GIT_CONFIG.get_config(f'review.lucca.{potential}', is_global=True)
+        if not potential_email:
+            potential_email = _ask_for_email(potential)
+        if potential_email in absents:
+            available -= {potential}
+    return available
+
+
 def _get_auto_reviewer(auto: _AutoEnum) -> str:
     if auto == 'round-robin':
-        available = set(_get_platform().engineers)
+        available = _remove_absents(set(_get_platform().engineers))
         if not available:
             raise _ScriptError('Unable to auto-assign a reviewer.')
         recents = _GIT_CONFIG.recent_reviewers
