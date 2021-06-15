@@ -304,6 +304,8 @@ class _References(typing.NamedTuple):
     remote: str
     # Remote branch onto which the changes should be merged.
     base: str
+    # Reference to the merge-base commit between `base` and `branch`.
+    merge_base: str
 
 
 # TODO(cyrille): Consider uncaching.
@@ -332,9 +334,8 @@ def _get_existing_remote() -> Optional[str]:
     return None
 
 
-def _create_branch_for_review() -> Optional[str]:
+def _create_branch_for_review(merge_base: str) -> Optional[str]:
     _run_git(['fetch'])
-    merge_base = _run_git(['merge-base', 'HEAD', 'origin/HEAD'])
     if not _has_git_diff(merge_base):
         # No new commit to review.
         return None
@@ -352,7 +353,7 @@ def _create_branch_for_review() -> Optional[str]:
     return branch
 
 
-def _get_git_branches(username: str, base: Optional[str]) -> _References:
+def _get_git_branches(username: str, base: Optional[str], is_new: bool) -> _References:
     """Compute the different branch names that will be needed throughout the script."""
 
     if _has_git_diff('HEAD'):
@@ -361,25 +362,29 @@ def _get_git_branches(username: str, base: Optional[str]) -> _References:
             'Commit, stash or revert your changes before sending for review.')
     branch = _get_head()
     default = _get_default()
-    if branch == default:
-        # TODO(cyrille): Add --new for side branches too.
-        new_branch = _create_branch_for_review()
-        if not new_branch:
+    remote_branch = _get_existing_remote()
+    if not base:
+        base = _get_best_base_branch(branch, remote_branch, default) or default
+    merge_base = _run_git(['merge-base', 'HEAD', f'{_REMOTE_REPO}/{base}'])
+    if is_new or branch == default:
+        new_branch = _create_branch_for_review(merge_base)
+        if new_branch:
+            branch = new_branch
+        elif branch == default:
             # List branches in user-preferred order, without the asterisk on current branch.
             all_branches = _run_git(['branch', '--format=%(refname:short)']).split('\n')
             all_branches.remove(default)
             raise _ScriptError('branch required:\n\t%s', '\n\t'.join(all_branches))
-        branch = new_branch
+        else:
+            raise _ScriptError('No change to put in a new review.')
 
-    remote_branch = _get_existing_remote() or _cleanup_branch_name(f'{username}-{branch}')
+    if not remote_branch:
+        remote_branch = _cleanup_branch_name(f'{username}-{branch}')
 
-    if not base:
-        base = _get_best_base_branch(branch, remote_branch, default) or default
-
-    return _References(default, branch, remote_branch, base)
+    return _References(default, branch, remote_branch, base, merge_base)
 
 
-def _get_best_base_branch(branch: str, remote: str, default: str) -> Optional[str]:
+def _get_best_base_branch(branch: str, remote: Optional[str], default: str) -> Optional[str]:
     """Guess on which branch the changes should be merged."""
 
     remote_branches: Optional[str] = None
@@ -731,17 +736,16 @@ def _get_auto_reviewer(auto: _AutoEnum) -> str:
 
 def prepare_push_and_request_review(
         *, username: str, base: Optional[str], reviewers: List[str],
-        is_submit: bool, auto: _AutoEnum) -> None:
+        is_submit: bool, auto: _AutoEnum, is_new: bool) -> None:
     """Prepare a local Change List for review."""
 
     if not username:
         raise _ScriptError(
             'Could not find username, most probably you need to setup an email with:\n'
             '  git config user.email <me@bayesimpact.org>')
-    refs = _get_git_branches(username, base)
-    merge_base = _run_git(['merge-base', 'HEAD', f'{_REMOTE_REPO}/{refs.base}'])
-    if _has_git_diff(merge_base):
-        _push(refs, _get_existing_remote() == refs.remote)
+    refs = _get_git_branches(username, base, is_new)
+    if _has_git_diff(refs.merge_base):
+        _push(refs, not is_new and _get_existing_remote() == refs.remote)
     if auto:
         reviewer = _get_auto_reviewer(auto)
         logging.info('Sending the review to "%s".', reviewer)
@@ -789,6 +793,11 @@ def main(string_args: Optional[List[str]] = None) -> None:
         '-f', '--force', action='store_true', help='''
             [DEPRECATED]: The script now determines whether the push should be forced or not.''',
     ).completer = argcomplete and argcomplete.SuppressCompleter()
+    parser.add_argument(
+        '-n', '--new', action='store_true', help='''
+            Force to consider the last changes as a new review.
+            This is the default when running on the default (main) branch.''',
+    )
     parser.add_argument('-s', '--submit', action='store_true', help='''
         Ask GitHub to auto-merge the branch, when all conditions are satisfied.
         Runs 'git submit'.''')
@@ -822,7 +831,7 @@ def main(string_args: Optional[List[str]] = None) -> None:
         return
     prepare_push_and_request_review(
         username=args.username, base=args.base, reviewers=args.reviewers,
-        is_submit=args.submit, auto=args.auto)
+        is_submit=args.submit, auto=args.auto, is_new=args.new)
 
 
 if __name__ == '__main__':
