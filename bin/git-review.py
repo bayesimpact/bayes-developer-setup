@@ -8,7 +8,10 @@ with the specified reviewers (if any).
 """
 
 import argparse
+import datetime
 import functools
+import getpass
+from html import parser
 import json
 import logging
 import os
@@ -18,9 +21,15 @@ import subprocess
 import sys
 import time
 import typing
-from typing import Any, List, Literal, NoReturn, Optional, Set, Tuple, TypedDict
+from typing import Any, Callable, List, Literal, NoReturn, Optional, Set, Tuple, TypedDict
 import unicodedata
 
+try:
+    import requests
+    from requests import exceptions
+except ImportError:
+    requests = None
+    exceptions = None
 try:
     import argcomplete
 except ImportError:
@@ -129,11 +138,22 @@ class _GithubPullRequest(typing.NamedTuple):
 
 class _GitConfig:
 
+    def get_config(self, key: str, *, is_global: bool = False) -> str:
+        """Get a config value from git."""
+
+        return _run_git(
+            ['config', '--default', ''] + (['--global'] if is_global else []) + ['--get', key])
+
+    def set_config(self, key: str, value: str, *, is_global: bool = False) -> None:
+        """Set a config value to git."""
+
+        _run_git(['config'] + (['--global'] if is_global else []) + [key, value])
+
     @property
     def engineers_team_id(self) -> str:
         """ID for the engineers team."""
 
-        value = _run_git(['config', '--default', '', '--get', 'review.engineers'])
+        value = self.get_config('review.engineers')
         if not value:
             value = str(_get_platform().get_engineers_team_id())
             self.engineers_team_id = value
@@ -141,21 +161,19 @@ class _GitConfig:
 
     @engineers_team_id.setter
     def engineers_team_id(self, value: str) -> None:
-        _run_git(['config', 'review.engineers', value])
+        self.set_config('review.engineers', value)
 
     @property
     def recent_reviewers(self) -> List[str]:
         """List of reviewers, starting with the most recently used ones."""
 
-        return _run_git([
-            'config', '--global', '--default', '', '--get', 'review.recent']).split(',')
+        return self.get_config('review.recent', is_global=True).split(',')
 
     @recent_reviewers.setter
     def recent_reviewers(self, reviewers: List[str]) -> None:
         """Update the list of most recent reviewers."""
 
-        _run_git([
-            'config', '--global', 'review.recent', ','.join(r for r in reviewers if r)])
+        self.set_config('review.recent', ','.join(r for r in reviewers if r), is_global=True)
 
 
 _GIT_CONFIG = _GitConfig()
@@ -195,10 +213,9 @@ def _get_default() -> str:
 
 @functools.lru_cache()
 def _get_existing_remote() -> Optional[str]:
-    try:
-        return _run_git(['config', f'branch.{_get_head()}.merge'])[len('refs.heads.'):]
-    except subprocess.CalledProcessError:
-        return None
+    if remote := _GIT_CONFIG.get_config(f'branch.{_get_head()}.merge'):
+        return remote[len('refs.heads.'):]
+    return None
 
 
 def _create_branch_for_review() -> Optional[str]:
@@ -556,7 +573,16 @@ class _GithubPlatform(_RemoteGitPlatform):
 def _get_platform() -> _RemoteGitPlatform:
     """Get the relevant review platform once and for all."""
 
-    return _RemoteGitPlatform.from_url(_run_git(['config', f'remote.{_REMOTE_REPO}.url']))
+    return _RemoteGitPlatform.from_url(_GIT_CONFIG.get_config(f'remote.{_REMOTE_REPO}.url'))
+
+
+def _ask_for_email(potential: str) -> str:
+    potential_email = input(
+        f'Please, enter the professional email for "{potential}".\n'
+        'It should end with `@bayesimpact.org`.')
+    if potential_email:
+        _GIT_CONFIG.set_config(f'review.lucca.{potential}', potential_email, is_global=True)
+    return potential_email
 
 
 def _get_auto_reviewer(auto: _AutoEnum) -> str:
@@ -602,7 +628,11 @@ def prepare_push_and_request_review(
 
 
 def _get_default_username(username: str) -> str:
-    return username or _run_git(['config', 'user.email']).split('@')[0]
+    if username:
+        return username
+    if email := _GIT_CONFIG.get_config('user.email'):
+        return email.split('@')[0]
+    raise _ScriptError('Please, set your email in git config.')
 
 
 def _browse_to(branch: str) -> None:
