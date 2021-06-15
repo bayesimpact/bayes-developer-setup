@@ -366,7 +366,8 @@ def _get_git_branches(username: str, base: Optional[str], is_new: bool) -> _Refe
     if not base:
         base = _get_best_base_branch(branch, remote_branch, default) or default
     merge_base = _run_git(['merge-base', 'HEAD', f'{_REMOTE_REPO}/{base}'])
-    if is_new or branch == default:
+    is_new = is_new or branch == default
+    if is_new:
         new_branch = _create_branch_for_review(merge_base)
         if new_branch:
             branch = new_branch
@@ -378,7 +379,7 @@ def _get_git_branches(username: str, base: Optional[str], is_new: bool) -> _Refe
         else:
             raise _ScriptError('No change to put in a new review.')
 
-    if not remote_branch:
+    if is_new or not remote_branch:
         remote_branch = _cleanup_branch_name(f'{username}-{branch}')
 
     return _References(default, branch, remote_branch, base, merge_base)
