@@ -574,9 +574,8 @@ def _get_auto_reviewer(auto: _AutoEnum) -> str:
         return next(iter(available))
 
 
-# TODO(cyrille): Force to use kwargs, since argparse does not type its output.
 def prepare_push_and_request_review(
-        username: str, base: Optional[str], reviewers: List[str],
+        *, username: str, base: Optional[str], reviewers: List[str],
         is_submit: bool, auto: _AutoEnum) -> None:
     """Prepare a local Change List for review."""
 
@@ -663,7 +662,8 @@ def main(string_args: Optional[List[str]] = None) -> None:
         _browse_to(args.browse)
         return
     prepare_push_and_request_review(
-        args.username, args.base, args.reviewers, args.submit, args.auto)
+        username=args.username, base=args.base, reviewers=args.reviewers,
+        is_submit=args.submit, auto=args.auto)
 
 
 if __name__ == '__main__':
