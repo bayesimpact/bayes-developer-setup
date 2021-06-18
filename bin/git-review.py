@@ -20,8 +20,11 @@ import re
 import subprocess
 import sys
 import time
+import termios
+import tty
 import typing
-from typing import Any, Callable, Dict, List, Literal, NoReturn, Optional, Set, Tuple, TypedDict
+from typing import Any, Callable, Dict, List, Literal, NoReturn, Optional, Set, Tuple, TypedDict, \
+    Union
 import unicodedata
 
 try:
@@ -52,7 +55,8 @@ try:
                 self._on_refresh(self)
             return super().get(url, *args, **kwargs)
 
-        def get_today_ooos(self) -> Set[str]:
+        @functools.cached_property
+        def today_ooos(self) -> Set[str]:
             """List the email addresses of people being OoO this half-day."""
 
             today = datetime.datetime.now()
@@ -109,6 +113,29 @@ _AutoEnum = Literal['round-robin']
 _AutoEnumValues: Tuple[_AutoEnum, ...] = ('round-robin',)
 
 _CACHE_BUSTER: List[str] = []
+
+
+class _Arrows(typing.NamedTuple):
+    UP: str
+    DOWN: str
+    RIGHT: str
+    LEFT: str
+
+
+_ARROWS = _Arrows(*[f'\x1b[{a}' for a in 'ABCD'])
+
+
+def _get_input_char() -> int:
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(sys.stdin.fileno())
+        ch = sys.stdin.read(1)
+        if ch == '\x1b':
+            ch += sys.stdin.read(2)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    return ch
 
 
 class _GitlabMRRequest(TypedDict, total=False):
@@ -700,41 +727,55 @@ def _get_platform() -> _RemoteGitPlatform:
     return _RemoteGitPlatform.from_url(_GIT_CONFIG.get_config(f'remote.{_REMOTE_REPO}.url'))
 
 
-def _ask_for_email(potential: str) -> str:
-    potential_email = input(
-        f'Please, enter the professional email for "{potential}".\n'
-        'It should end with `@bayesimpact.org`.')
-    if potential_email:
-        _GIT_CONFIG.set_config(f'review.lucca.{potential}', potential_email, is_global=True)
-    return potential_email
+def _ask_email_or_continue(potential: str, possible_emails: List[str]) -> Union[bool, str]:
+    """Ask if one of the emails is potential's, or if you don't want their review.
+
+    If an email is selected, returns this email.
+    Otherwise, returns True if user answered "I don't want them to review this".
+    """
+
+    print(f'''No email is set for {potential}. Is one of those their address?''')
+    selected = int(subprocess.check_output(
+        f'''select email in {' '.join(possible_emails)} \
+          "I don't want them to review this" \
+          "None of the above"
+        do
+          if [ -n "$email" ]; then
+            break
+          fi
+        done
+        echo "$REPLY"
+        ''', env={'PS3': f"Which is {potential}'s email?"}, shell=True, text=True).strip()) - 1
+    try:
+        email = possible_emails[selected]
+        _GIT_CONFIG.set_config(f'review.lucca.{potential}', email, is_global=True)
+        return email
+    except IndexError:
+        return selected == len(possible_emails)
 
 
-def _remove_absents(available: Set[str]) -> Set[str]:
-    absents: Set[str] = set()
-    if session := _GIT_CONFIG.lucca_session:
-        absents = session.get_today_ooos()
-    if not absents:
-        return available
-    for potential in set(available):
-        potential_email = _GIT_CONFIG.get_config(f'review.lucca.{potential}', is_global=True)
-        if not potential_email:
-            potential_email = _ask_for_email(potential)
-        if potential_email in absents:
-            available -= {potential}
-    return available
+def _is_absent(potential: str) -> bool:
+    session = _GIT_CONFIG.lucca_session
+    if not session or not session.today_ooos:
+        return False
+    potential_email: Union[bool, str] = \
+        _GIT_CONFIG.get_config(f'review.lucca.{potential}', is_global=True)
+    if potential_email in session.today_ooos:
+        return True
+    if not potential_email:
+        potential_email = _ask_email_or_continue(potential, list(session.today_ooos))
+    return potential_email is True or potential_email in session.today_ooos
 
 
 def _get_auto_reviewer(auto: _AutoEnum) -> str:
     if auto == 'round-robin':
-        available = _remove_absents(set(_get_platform().engineers))
-        if not available:
+        all_engineers = set(_get_platform().engineers)
+        if not all_engineers:
             raise _ScriptError('Unable to auto-assign a reviewer.')
-        recents = _GIT_CONFIG.recent_reviewers
-        for recent in recents:
-            available = available - {recent}
-            if not available:
-                return recent
-        return next(iter(available))
+        prioritized_reviewers = [
+            r for r in list(dict.fromkeys(_GIT_CONFIG.recent_reviewers + list(all_engineers)))
+            if r in all_engineers][::-1]
+        return next(r for r in prioritized_reviewers if not _is_absent(r))
 
 
 def prepare_push_and_request_review(
