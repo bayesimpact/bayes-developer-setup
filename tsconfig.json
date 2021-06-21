@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "esModuleInterop": true,
+    "lib": ["dom", "dom.iterable", "es2015", "es6", "es2019"],
+    "module": "esNext",
+    "noUnusedLocals": true,
+    "target": "ES2017"
+  },
+  "include": ["*.ts"]
+}
