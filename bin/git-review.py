@@ -659,7 +659,7 @@ class _GithubPlatform(_RemoteGitPlatform):
         if not reviewers:
             return
         pull_number = self._get_review_number(refs.remote, refs.base)
-        requested_reviewers = set(reviewers) & self.engineers
+        requested_reviewers = set(reviewers)
         assignees = set(reviewers) - self.engineers
         _run_hub([
             'api', r'/repos/{owner}/{repo}/pulls/'
@@ -686,7 +686,7 @@ class _GithubPlatform(_RemoteGitPlatform):
             '-b', refs.base]
         if reviewers:
             if self.engineers:
-                requested_reviewers = set(reviewers) & self.engineers
+                requested_reviewers = set(reviewers)
                 assignees = set(reviewers) - self.engineers
             else:
                 assignees = requested_reviewers = set(reviewers)
