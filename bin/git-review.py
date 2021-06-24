@@ -363,7 +363,7 @@ def _get_existing_remote() -> Optional[str]:
     return None
 
 
-def _create_branch_for_review(merge_base: str) -> Optional[str]:
+def _create_branch_for_review(merge_base: str, username: str) -> Optional[str]:
     _run_git(['fetch'])
     if not _has_git_diff(merge_base):
         # No new commit to review.
@@ -373,7 +373,13 @@ def _create_branch_for_review(merge_base: str) -> Optional[str]:
     branch = '-'.join(
         word.lower()
         for word in _WORD_REGEX.findall(_cleanup_branch_name(title).replace('_', '-'))[:2])
-    branch += f'-{int(time.time()):d}'
+    prefix = f'{_REMOTE_REPO}/{username}-{branch}'
+    count_with_prefix = sum(
+        1
+        for b in _run_git(['branch', '-r', '--format=%(refname:short)']).split('\n')
+        if b.startswith(prefix))
+    if count_with_prefix:
+        branch += f'-{count_with_prefix:d}'
     _run_git(['checkout', '-b', branch])
     _run_git(['checkout', '-'])
     _run_git(['reset', '--hard', merge_base])
@@ -397,7 +403,7 @@ def _get_git_branches(username: str, base: Optional[str], is_new: bool) -> _Refe
     merge_base = _run_git(['merge-base', 'HEAD', f'{_REMOTE_REPO}/{base}'])
     is_new = is_new or branch == default
     if is_new:
-        new_branch = _create_branch_for_review(merge_base)
+        new_branch = _create_branch_for_review(merge_base, username)
         if new_branch:
             branch = new_branch
         elif branch == default:
