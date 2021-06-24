@@ -799,7 +799,7 @@ def prepare_push_and_request_review(
     if auto:
         reviewer = _get_auto_reviewer(auto)
         logging.info('Sending the review to "%s".', reviewer)
-        reviewers = [reviewer]
+        reviewers.append(reviewer)
     _get_platform().request_review(refs, reviewers)
     if not is_submit:
         return
