@@ -376,6 +376,13 @@ if [ -z "${BRANCH_REMOTE}" ]; then
   exit 5
 fi
 
+# Check that the remote branch is synced with the local one.
+if [ "$(git rev-parse "${BRANCH_REMOTE}/${BRANCH_MERGE}")" != "$(git rev-parse "${BRANCH}")" ]; then
+  echo_warning "Push your branch on ${BRANCH_REMOTE}, or you'll have a hard time removing the pull request:"
+  echo_info "  git push -f ${BRANCH_REMOTE} ${BRANCH}:${BRANCH_MERGE}"
+  git push -f "${BRANCH_REMOTE}" "${BRANCH}:${BRANCH_MERGE}" || abort
+fi
+
 if [ -n "$AUTO_MERGE_ENABLED" ]; then
   echo_info "GitHub will auto-merge this pull-request once CI is successful."
 elif [ -z "${NO_SQUASH_ON_GITHUB}" ] && [ -n "$CAN_USE_HUB" ]; then
@@ -406,13 +413,6 @@ elif [ -z "${NO_SQUASH_ON_GITHUB}" ] && [ -n "$CAN_USE_HUB" ]; then
   git checkout $DEFAULT_BRANCH
   git pull --ff-only
 else
-  # Check that the remote branch is synced with the local one.
-  if [ "$(git rev-parse "${BRANCH_REMOTE}/${BRANCH_MERGE}")" != "$(git rev-parse "${BRANCH}")" ]; then
-    echo_warning "Push your branch on ${BRANCH_REMOTE}, or you'll have a hard time removing the pull request:"
-    echo_info "  git push -f ${BRANCH_REMOTE} ${BRANCH}:${BRANCH_MERGE}"
-    git push -f "${BRANCH_REMOTE}" "${BRANCH}:${BRANCH_MERGE}" || abort
-  fi
-
   # Update default branch locally.
   git checkout $DEFAULT_BRANCH
   if ! (git rebase "${BRANCH}"); then
