@@ -59,12 +59,13 @@ _git_submit()
     fi
     return
   fi
-  local available_branches="$(__git_heads | grep -vE '^ma(ster|in)$')"
+  local available_branches
   if [ -n "$_GIT_SUBMIT_ABORT" ]; then
-    remote_branches="$(__git_remote_heads |
+    available_branches="$(git branch -r --format='%(refname:short)' |
       grep -E "[^/]+/$_GIT_SUBMIT_USER-" |
       sed -E "s~[^/]+/$_GIT_SUBMIT_USER-~~")"
-    available_branches="$available_branches"$'\n'"$remote_branches"
+  else
+    available_branches="$(__git_heads | grep -vE '^ma(ster|in)$')"
   fi
   __gitcomp "$available_branches"
   unset _GIT_SUBMIT_FORCE _GIT_SUBMIT_USER_OPT _GIT_SUBMIT_USER _GIT_SUBMIT_ABORT
