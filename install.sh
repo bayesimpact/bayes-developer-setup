@@ -104,6 +104,7 @@ export PATH="$PATH:$DIR/bin"
 add_to_shellrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" != *\":$DIR/man:\"* ]]; then export MANPATH=\"\$MANPATH:$DIR/man\"; fi"
 
 # Install autocompletions.
+# TODO(cyrille): Try to unify those behaviors.
 if [ "$(uname)" == "Darwin" ] && which -s brew; then
   if brew list bash-completion; then
     AUTOCOMPLETE_PATH="$(brew --prefix)/etc/bash_completion.d"
@@ -111,7 +112,8 @@ if [ "$(uname)" == "Darwin" ] && which -s brew; then
     AUTOCOMPLETE_PATH="/usr/local/share/bash-completion/completions"
   fi
 elif [ "$(uname)" == "Linux" ]; then
-  AUTOCOMPLETE_PATH="/usr/share/bash-completion/completions"
+  AUTOCOMPLETE_PATH="${BASH_COMPLETION_USER_DIR:-${XDG_DATA_HOME:-${HOME}/.local/share}/bash-completion}/completions"
+  mkdir -p "$AUTOCOMPLETE_PATH"
 fi
 if [ -d "$AUTOCOMPLETE_PATH" ]; then
   # TODO(cyrille): Put the completion scripts in a subfolder.
