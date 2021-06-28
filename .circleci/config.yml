@@ -11,6 +11,12 @@ jobs:
           command: |
             # Run docker services without volumes.
             docker-compose build --pull test test-reviewable test-hooks
+  ping-to-slack:
+    docker:
+      - image: bayesimpact/circleci
+    steps:
+      # TODO(cyrille): Drop the empty string once the docker image is updated.
+      - run: ping_reviewers ''
 
 workflows:
   version: 2
@@ -20,6 +26,13 @@ workflows:
           filters:
             tags:
               only: /.*/
+      - ping-to-slack:
+          context: Slack
+          filters:
+            branches:
+              ignore: main
+          requires:
+            - test
 
 experimental:
   notify:
