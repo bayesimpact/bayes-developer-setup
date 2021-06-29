@@ -12,6 +12,7 @@ import datetime
 import functools
 import getpass
 from html import parser
+import itertools
 import json
 import logging
 import os
@@ -19,7 +20,6 @@ import platform
 import re
 import subprocess
 import sys
-import time
 import termios
 import tty
 import typing
@@ -374,12 +374,15 @@ def _create_branch_for_review(merge_base: str, username: str) -> Optional[str]:
         word.lower()
         for word in _WORD_REGEX.findall(_cleanup_branch_name(title).replace('_', '-'))[:2])
     prefix = f'{_REMOTE_REPO}/{username}-{branch}'
-    count_with_prefix = sum(
-        1
+    suffixes = {
+        b[len(prefix):]
         for b in _run_git(['branch', '-r', '--format=%(refname:short)']).split('\n')
-        if b.startswith(prefix))
-    if count_with_prefix:
-        branch += f'-{count_with_prefix:d}'
+        if b.startswith(prefix)}
+    if suffixes:
+        branch += next(
+            f'-{counter:d}'
+            for counter in itertools.count()
+            if f'-{counter:d}' not in suffixes)
     _run_git(['checkout', '-b', branch])
     _run_git(['checkout', '-'])
     _run_git(['reset', '--hard', merge_base])
