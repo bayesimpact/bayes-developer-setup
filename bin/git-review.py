@@ -11,7 +11,7 @@ import argparse
 import datetime
 import functools
 import getpass
-from html import parser
+from html import parser as html_parser
 import json
 import logging
 import os
@@ -19,9 +19,6 @@ import platform
 import re
 import subprocess
 import sys
-import time
-import termios
-import tty
 import typing
 from typing import Any, Callable, Dict, List, Literal, NoReturn, Optional, Set, Tuple, TypedDict, \
     Union
@@ -115,29 +112,6 @@ _AutoEnumValues: Tuple[_AutoEnum, ...] = ('round-robin',)
 _CACHE_BUSTER: List[str] = []
 
 
-class _Arrows(typing.NamedTuple):
-    UP: str
-    DOWN: str
-    RIGHT: str
-    LEFT: str
-
-
-_ARROWS = _Arrows(*[f'\x1b[{a}' for a in 'ABCD'])
-
-
-def _get_input_char() -> int:
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    try:
-        tty.setraw(sys.stdin.fileno())
-        ch = sys.stdin.read(1)
-        if ch == '\x1b':
-            ch += sys.stdin.read(2)
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-    return ch
-
-
 class _GitlabMRRequest(TypedDict, total=False):
     description: str
     source_branch: str
@@ -203,7 +177,7 @@ class _GithubPullRequest(typing.NamedTuple):
             for pr in all_prs]
 
 
-class LoginHTMLParser(parser.HTMLParser):
+class LoginHTMLParser(html_parser.HTMLParser):
     """Parse the login HTML page, and fill its form with login info to get an auth token."""
 
     def __init__(self, login_url: str, session: 'requests.Session') -> None:
@@ -258,7 +232,7 @@ class _GitConfig:
 
         value = self.get_config('review.engineers')
         if not value:
-            value = str(_get_platform().get_engineers_team_id())
+            value = _get_platform().get_engineers_team_id()
             self.engineers_team_id = value
         return value
 
@@ -492,7 +466,7 @@ class _RemoteGitPlatform:
             return _GithubPlatform(github_match[1])
         raise NotImplementedError(f'Review platform not recognized. Remote URL is {remote_url}')
 
-    def get_engineers_team_id(self) -> int:
+    def get_engineers_team_id(self) -> str:
         """Find an ID that references the engineering team on this platform."""
 
         logging.warning('No engineering team set for this platform')
@@ -649,9 +623,9 @@ class _GithubPlatform(_RemoteGitPlatform):
             _run_hub(['api', f'/teams/{_GIT_CONFIG.engineers_team_id}/members'], cache=_ONE_DAY))
         return {member['login'] for member in members} - {self.username}
 
-    def get_engineers_team_id(self) -> int:
-        return json.loads(_run_hub(
-            ['api', f'/orgs/bayesimpact/teams/{_GITHUB_ENG_TEAM_SLUG}'], cache=_ONE_DAY))['id']
+    def get_engineers_team_id(self) -> str:
+        return str(json.loads(_run_hub(
+            ['api', f'/orgs/bayesimpact/teams/{_GITHUB_ENG_TEAM_SLUG}'], cache=_ONE_DAY))['id'])
 
     def _add_label(self, issue_number: str, label: str) -> None:
         _run_hub([
