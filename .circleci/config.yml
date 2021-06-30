@@ -15,8 +15,9 @@ jobs:
     docker:
       - image: bayesimpact/circleci
     steps:
-      # TODO(cyrille): Drop the empty string once the docker image is updated.
-      - run: ping_reviewers ''
+      - run:
+          name: Ping PR reviewers on Slack.
+          command: ping_reviewers
 
 workflows:
   version: 2
