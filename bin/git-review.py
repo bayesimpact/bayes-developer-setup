@@ -106,10 +106,6 @@ _WORD_REGEX = re.compile(r'\w+')
 # Default value for the browse action.
 _BROWSE_CURRENT = '__current__browse__'
 
-# TODO(cyrille): Add blame mode.
-_AutoEnum = Literal['round-robin']
-_AutoEnumValues: Tuple[_AutoEnum, ...] = ('round-robin',)
-
 _CACHE_BUSTER: List[str] = []
 
 
@@ -750,20 +746,19 @@ def _is_absent(potential: str) -> bool:
     return potential_email is True or potential_email in session.today_ooos
 
 
-def _get_auto_reviewer(auto: _AutoEnum) -> str:
-    if auto == 'round-robin':
-        all_engineers = set(_get_platform().engineers)
-        if not all_engineers:
-            raise _ScriptError('Unable to auto-assign a reviewer.')
-        prioritized_reviewers = [
-            r for r in list(dict.fromkeys(_GIT_CONFIG.recent_reviewers + list(all_engineers)))
-            if r in all_engineers][::-1]
-        return next(r for r in prioritized_reviewers if not _is_absent(r))
+def _get_auto_reviewer() -> str:
+    all_engineers = set(_get_platform().engineers)
+    if not all_engineers:
+        raise _ScriptError('Unable to auto-assign a reviewer.')
+    prioritized_reviewers = [
+        r for r in list(dict.fromkeys(_GIT_CONFIG.recent_reviewers + list(all_engineers)))
+        if r in all_engineers][::-1]
+    return next(r for r in prioritized_reviewers if not _is_absent(r))
 
 
 def prepare_push_and_request_review(
         *, username: str, base: Optional[str], reviewers: List[str],
-        is_submit: bool, auto: _AutoEnum, is_new: bool) -> None:
+        is_submit: bool, is_auto: bool, is_new: bool) -> None:
     """Prepare a local Change List for review."""
 
     if not username:
@@ -773,8 +768,8 @@ def prepare_push_and_request_review(
     refs = _get_git_branches(username, base, is_new)
     if _has_git_diff(refs.merge_base):
         _push(refs, not is_new and _get_existing_remote() == refs.remote)
-    if auto:
-        reviewer = _get_auto_reviewer(auto)
+    if is_auto:
+        reviewer = _get_auto_reviewer()
         logging.info('Sending the review to "%s".', reviewer)
         reviewers.append(reviewer)
     _get_platform().request_review(refs, reviewers)
@@ -813,9 +808,8 @@ def main(string_args: Optional[List[str]] = None) -> None:
         help='Github handles of the reviewers you want to assign to your review.', nargs='*',
     ).completer = lambda **kw: _get_platform().get_available_reviewers()
     parser.add_argument(
-        '-a', '--auto', choices=_AutoEnumValues, help='''
-            Let the program choose an engineer to review for you.''',
-        nargs='?', const=_AutoEnumValues[0])
+        '-a', '--auto', action='store_true', help='''
+            Let the program choose an engineer to review for you.''')
     parser.add_argument(
         '-f', '--force', action='store_true', help='''
             [DEPRECATED]: The script now determines whether the push should be forced or not.''',
@@ -858,7 +852,7 @@ def main(string_args: Optional[List[str]] = None) -> None:
         return
     prepare_push_and_request_review(
         username=args.username, base=args.base, reviewers=args.reviewers,
-        is_submit=args.submit, auto=args.auto, is_new=args.new)
+        is_submit=args.submit, is_auto=args.auto, is_new=args.new)
 
 
 if __name__ == '__main__':
