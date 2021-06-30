@@ -645,7 +645,8 @@ class _GithubPlatform(_RemoteGitPlatform):
         pull_number = self._get_review_number(refs.remote, refs.base)
         assignees = requested_reviewers = set(reviewers)
         if self.engineers:
-            requested_reviewers &= set(self.engineers)
+            requested_reviewers = requested_reviewers & set(self.engineers)
+        breakpoint()
         _run_hub([
             'api', r'/repos/{owner}/{repo}/pulls/'
             f'{pull_number}/requested_reviewers',
@@ -672,7 +673,7 @@ class _GithubPlatform(_RemoteGitPlatform):
         if reviewers:
             assignees = requested_reviewers = set(reviewers)
             if self.engineers:
-                requested_reviewers &= set(self.engineers)
+                requested_reviewers = requested_reviewers & set(self.engineers)
             hub_command.extend(['-a', ','.join(assignees), '-r', ','.join(requested_reviewers)])
         output = _run_hub(hub_command)
         logging.info(output.replace('github.com', 'reviewable.io/reviews').replace('pull/', ''))
