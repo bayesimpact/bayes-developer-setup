@@ -6,7 +6,7 @@
 readonly CIRCLE_CI_CONFIG="$(git rev-parse --show-toplevel)/.circleci/config.yml"
 
 if [ -f "$CIRCLE_CI_CONFIG" ]; then
-  if ! command -v circleci > /dev/null && [ -n "$PRECOMMIT_NO_CIRCLECI_WARNING" ]; then
+  if ! command -v circleci > /dev/null && [ -z "$PRECOMMIT_NO_CIRCLECI_WARNING" ]; then
     echo "It looks like you're using CircleCI,
       but its configuration validating tool is not installed."
     echo "To check configuration changes before committing them, please run 'npm -g i circleci'."
