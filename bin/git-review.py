@@ -8,6 +8,7 @@ with the specified reviewers (if any).
 """
 
 import argparse
+import collections
 import datetime
 import functools
 import getpass
@@ -41,34 +42,48 @@ try:
                 self.cookies.set('authToken', token)
             self._on_refresh = on_refresh
 
-        def get(self, url: str, *args: Any, **kwargs: Any) -> requests.Response:
+        def get(
+                self, url: str, *,
+                params: Optional[dict[str, Union[str, int]]] = None) -> requests.Response:
             url = f'{self._base_url}/{url}'
             try:
-                response = super().get(url, *args, **kwargs)
+                response = super().get(url, params=params)
                 response.raise_for_status()
                 return response
             except exceptions.HTTPError:
                 LoginHTMLParser('identity/login', self).\
                     get_token(input('Lucca login:'), getpass.getpass())
                 self._on_refresh(self)
-            return super().get(url, *args, **kwargs)
+            return super().get(url, params=params)
 
-        @functools.cached_property
-        def today_ooos(self) -> Set[str]:
-            """List the email addresses of people being OoO this half-day."""
+        def get_ooos_on(self, *, half_day_offset: int = 0) -> set[str]:
+            """Find the OoO people in a given number of half-days."""
 
-            today = datetime.datetime.now()
-            day = today.date().isoformat()
-            is_am = today.hour <= 12
+            day = datetime.datetime.now() + datetime.timedelta(days=half_day_offset / 2)
+            date = day.date().isoformat()
+            is_am = day.hour < 12
+
             response = self.get('api/v3/leaves', params={
-                'date': day,
-                'fields': 'leavePeriod[owner[mail]]',
-                'isAM': is_am,
+                'date': date,
+                'fields': 'leavePeriod.owner.mail,isAM',
                 'leavePeriod.owner.departmentId': 1,
             })
             response.raise_for_status()
-            return {
-                item['leavePeriod']['owner']['mail'] for item in response.json()['data']['items']}
+            absents = {
+                leave['leavePeriod']['owner']['mail']
+                for leave in response.json()['data']['items']
+                if leave['isAM'] == is_am}
+
+            response = self.get('api/v3/userDates', params={
+                'date': date,
+                'fields': 'am.isOff,pm.isOff,owner.mail',
+            })
+            response.raise_for_status()
+            off_days = {
+                off_day['owner']['mail']
+                for off_day in response.json()['data']['items']
+                if off_day['am' if is_am else 'pm']['isOff']}
+            return absents | off_days
 except ImportError:
     requests = None
     LuccaSession = None  # pylint: disable=invalid-name
@@ -733,27 +748,23 @@ def _ask_email_or_continue(potential: str, possible_emails: List[str]) -> Union[
         return selected == len(possible_emails)
 
 
-def _is_absent(potential: str) -> bool:
-    session = _GIT_CONFIG.lucca_session
-    if not session or not session.today_ooos:
-        return False
-    potential_email: Union[bool, str] = \
-        _GIT_CONFIG.get_config(f'review.lucca.{potential}', is_global=True)
-    if potential_email in session.today_ooos:
-        return True
-    if not potential_email:
-        potential_email = _ask_email_or_continue(potential, list(session.today_ooos))
-    return potential_email is True or potential_email in session.today_ooos
-
-
-def _get_auto_reviewer() -> str:
+def _get_auto_reviewer() -> Optional[str]:
     all_engineers = set(_get_platform().engineers)
     if not all_engineers:
         raise _ScriptError('Unable to auto-assign a reviewer.')
     prioritized_reviewers = [
         r for r in list(dict.fromkeys(_GIT_CONFIG.recent_reviewers + list(all_engineers)))
         if r in all_engineers][::-1]
-    return next(r for r in prioritized_reviewers if not _is_absent(r))
+    if not prioritized_reviewers:
+        return None
+    for half_day_offset in itertools.count():
+        if _GIT_CONFIG.lucca_session:
+            absents = _GIT_CONFIG.lucca_session.get_ooos_on(half_day_offset=half_day_offset)
+        else:
+            absents = set()
+        if someone := next((r for r in prioritized_reviewers if r not in absents), None):
+            return someone
+    raise ValueError('This cannot happen.')
 
 
 def prepare_push_and_request_review(
