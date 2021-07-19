@@ -228,7 +228,7 @@ class LoginHTMLParser(html_parser.HTMLParser):
 class _GitConfig:
 
     def get_config(self, key: str, *, is_global: bool = False) -> str:
-        """Get a config value from git."""
+        """Get a config value from git. Returns an empty string if nothing is found."""
 
         return _run_git(
             ['config', '--default', ''] + (['--global'] if is_global else []) + ['--get', key])
@@ -721,16 +721,16 @@ def _get_platform() -> _RemoteGitPlatform:
     return _RemoteGitPlatform.from_url(_GIT_CONFIG.get_config(f'remote.{_REMOTE_REPO}.url'))
 
 
-def _ask_email_or_continue(potential: str, possible_emails: List[str]) -> Union[bool, str]:
+def _can_review(potential: str, absentee_emails: list[str]) -> bool:
     """Ask if one of the emails is potential's, or if you don't want their review.
 
-    If an email is selected, returns this email.
-    Otherwise, returns True if user answered "I don't want them to review this".
+    If an email is selected, it saves this email in git config, and returns False.
+    Otherwise, returns False if user answered "I don't want them to review this".
     """
 
     print(f'''No email is set for {potential}. Is one of those their address?''')
     selected = int(subprocess.check_output(
-        f'''select email in {' '.join(possible_emails)} \
+        f'''select email in {' '.join(absentee_emails)} \
           "I don't want them to review this" \
           "None of the above"
         do
@@ -741,11 +741,11 @@ def _ask_email_or_continue(potential: str, possible_emails: List[str]) -> Union[
         echo "$REPLY"
         ''', env={'PS3': f"Which is {potential}'s email?"}, shell=True, text=True).strip()) - 1
     try:
-        email = possible_emails[selected]
-        _GIT_CONFIG.set_config(f'review.lucca.{potential}', email, is_global=True)
-        return email
+        _GIT_CONFIG.set_config(
+            f'review.lucca.{potential}', absentee_emails[selected], is_global=True)
+        return False
     except IndexError:
-        return selected == len(possible_emails)
+        return selected > len(absentee_emails)
 
 
 def _get_auto_reviewer() -> Optional[str]:
@@ -757,13 +757,16 @@ def _get_auto_reviewer() -> Optional[str]:
         if r in all_engineers][::-1]
     if not prioritized_reviewers:
         return None
+    if not _GIT_CONFIG.lucca_session:
+        return prioritized_reviewers[0]
     for half_day_offset in itertools.count():
-        if _GIT_CONFIG.lucca_session:
-            absents = _GIT_CONFIG.lucca_session.get_ooos_on(half_day_offset=half_day_offset)
-        else:
-            absents = set()
-        if someone := next((r for r in prioritized_reviewers if r not in absents), None):
-            return someone
+        absents = _GIT_CONFIG.lucca_session.get_ooos_on(half_day_offset=half_day_offset)
+        for reviewer in prioritized_reviewers:
+            reviewer_email = _GIT_CONFIG.get_config(f'review.luccal.{reviewer}')
+            if reviewer_email and reviewer_email not in absents:
+                return reviewer
+            if not reviewer_email and _can_review(reviewer, list(absents)):
+                return reviewer
     raise ValueError('This cannot happen.')
 
 
