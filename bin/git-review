@@ -76,7 +76,7 @@ fi
 if [ -n "$2" ]; then
   readonly REMOTE_BASE_BRANCH="$2"
 else
-  for sha1 in $(git rev-list --max-count=5 HEAD); do
+  for sha1 in $(git rev-list --max-count=5 HEAD --); do
     remote_branches="$(git branch -r --contains $sha1 --list "${REMOTE_REPO}/*")"
     if [ -n "$remote_branches" ]; then
       # Found at least one remote branch that contains this commit.
