@@ -105,6 +105,8 @@ _GITHUB_URL_REGEX = re.compile(r'^git@github\.com:(.*)\.git')
 _WORD_REGEX = re.compile(r'\w+')
 # Default value for the browse action.
 _BROWSE_CURRENT = '__current__browse__'
+# Whether we should print each command before running it (bash xtrace), and the prefix to use.
+_XTRACE_PREFIX = []
 
 _CACHE_BUSTER: List[str] = []
 
@@ -127,12 +129,26 @@ class _ScriptError(ValueError):
         return sum((ord(char) - 64) * 53 ** i for i, char in enumerate(self._stable_message))
 
 
+def _xtrace(command: List[str]) -> None:
+    if _XTRACE_PREFIX:
+        sys.stderr.write(
+            f'{_XTRACE_PREFIX[0]} ' +
+            ' '.join(
+                f'"{word}"' if ' ' in word else word
+                for word in command
+            ) + '\n')
+
+
 def _run_git(command: List[str], **kwargs: Any) -> str:
-    return subprocess.check_output(['git'] + command, text=True, **kwargs).strip()
+    full_command = ['git'] + command
+    _xtrace(full_command)
+    return subprocess.check_output(full_command, text=True, **kwargs).strip()
 
 
 def _has_git_diff(base: str) -> bool:
-    return bool(subprocess.run(['git', 'diff', '--quiet', base]).returncode)
+    full_command = ['git', 'diff', '--quiet', base]
+    _xtrace(full_command)
+    return bool(subprocess.run(full_command).returncode)
 
 
 # TODO(cyrille): Use tuples rather than lists.
@@ -140,6 +156,7 @@ def _run_hub(command: List[str], *, cache: Optional[int] = None, **kwargs: Any) 
     final_command = ['hub'] + command
     if cache and not _CACHE_BUSTER:
         final_command.extend(['--cache', str(cache)])
+    _xtrace(final_command)
     return subprocess.check_output(final_command, text=True, **kwargs).strip()
 
 
@@ -442,6 +459,7 @@ def _run_git_review_hook(branch: str, remote_branch: str, reviewers: List[str]) 
     hook_script = f'{_run_git(["rev-parse", "--show-toplevel"])}/.git-review-hook'
     if not os.access(hook_script, os.X_OK):
         return ''
+    _xtrace(hook_script)
     return subprocess.check_output(hook_script, text=True, env=dict(os.environ, **{
         'BRANCH': branch,
         'REMOTE_BRANCH': remote_branch,
@@ -795,6 +813,7 @@ def _browse_to(branch: str) -> None:
     real_branch = _get_existing_remote() or _get_head() if branch == _BROWSE_CURRENT else branch
     url = _get_platform().get_review_url_for(real_branch or branch)
     open_command = 'open' if platform.system() == 'Darwin' else 'xdg-open'
+    _xtrace(open_command)
     subprocess.check_output([open_command, url])
 
 
@@ -819,6 +838,10 @@ def main(string_args: Optional[List[str]] = None) -> None:
             Force to consider the last changes as a new review.
             This is the default when running on the default (main) branch.''',
     )
+    parser.add_argument(
+        '-x', '--xtrace', help='''
+            If set, print all subcommands before running them like the bash xtrace mode. And use
+            the given value as a prefix for each line.''')
     parser.add_argument('-s', '--submit', action='store_true', help='''
         Ask GitHub to auto-merge the branch, when all conditions are satisfied.
         Runs 'git submit'.''')
@@ -847,6 +870,9 @@ def main(string_args: Optional[List[str]] = None) -> None:
         logging.warning(
             'The --force (-f) option is now deprecated. '
             'The force option of the push is now determined by the current git state.')
+    if args.xtrace:
+        del _XTRACE_PREFIX[:]
+        _XTRACE_PREFIX.append(args.xtrace)
     if args.browse:
         _browse_to(args.browse)
         return
