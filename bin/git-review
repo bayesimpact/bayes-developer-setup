@@ -1,7 +1,10 @@
 #!/bin/bash
 
 if [ -n "$GIT_REVIEW_EXPERIMENTAL_PYTHON" ]; then
-  python3 "$(dirname "${BASH_SOURCE[0]}")/git-review.py" "$@"
+  if shopt -po xtrace > /dev/null ; then
+    readonly XTRACE='--xtrace ++'
+  fi
+  python3 "$(dirname "${BASH_SOURCE[0]}")/git-review.py" $XTRACE "$@"
   exit $?
 fi
 
