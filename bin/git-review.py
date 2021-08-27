@@ -465,12 +465,12 @@ def _make_pr_message(refs: _References, reviewers: List[str]) -> str:
     """Create a message for the review request."""
 
     message = _run_git(['log', '--format=%B', f'{_REMOTE_REPO}/{refs.base}..{refs.branch}'])
-    if hook_message := _run_git_review_hook(refs.branch, refs.remote, reviewers):
+    if hook_message := _run_git_review_hook(refs, reviewers):
         message += f'\n\n{hook_message}'
     return message
 
 
-def _run_git_review_hook(branch: str, remote_branch: str, reviewers: List[str]) -> str:
+def _run_git_review_hook(refs: _References, reviewers: List[str]) -> str:
     """Run the git-review hook if it exists."""
 
     hook_script = f'{_run_git(["rev-parse", "--show-toplevel"])}/.git-review-hook'
@@ -478,8 +478,9 @@ def _run_git_review_hook(branch: str, remote_branch: str, reviewers: List[str]) 
         return ''
     _xtrace([hook_script])
     return subprocess.check_output(hook_script, text=True, env=dict(os.environ, **{
-        'BRANCH': branch,
-        'REMOTE_BRANCH': remote_branch,
+        'BRANCH': refs.branch,
+        'MERGE_BASE': refs.merge_base,
+        'REMOTE_BRANCH': refs.remote,
         'REVIEWER': ','.join(reviewers),
     })).strip()
 
