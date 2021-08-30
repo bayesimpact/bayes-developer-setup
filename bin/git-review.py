@@ -70,9 +70,10 @@ try:
             })
             response.raise_for_status()
             absents = {
-                leave['leavePeriod']['owner']['mail']
+                leave_email
                 for leave in response.json()['data']['items']
-                if leave['isAM'] == is_am}
+                if leave['isAM'] == is_am
+                if (leave_email := leave['leavePeriod']['owner'].get('mail'))}
 
             response = self.get('api/v3/userDates', params={
                 'date': date,
@@ -80,9 +81,10 @@ try:
             })
             response.raise_for_status()
             off_days = {
-                off_day['owner']['mail']
+                off_email
                 for off_day in response.json()['data']['items']
-                if off_day['am' if is_am else 'pm']['isOff']}
+                if off_day['am' if is_am else 'pm']['isOff']
+                if (off_email := off_day['owner'].get('mail'))}
             return absents | off_days
 except ImportError:
     requests = None
