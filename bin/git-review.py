@@ -785,7 +785,7 @@ def _get_auto_reviewer() -> Optional[str]:
     for half_day_offset in itertools.count():
         absents = _GIT_CONFIG.lucca_session.get_ooos_on(half_day_offset=half_day_offset)
         for reviewer in prioritized_reviewers:
-            reviewer_email = _GIT_CONFIG.get_config(f'review.luccal.{reviewer}')
+            reviewer_email = _GIT_CONFIG.get_config(f'review.lucca.{reviewer}')
             if reviewer_email and reviewer_email not in absents:
                 return reviewer
             if not reviewer_email and _can_review(reviewer, list(absents)):
