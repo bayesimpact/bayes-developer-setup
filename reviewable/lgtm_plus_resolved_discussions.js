@@ -8,6 +8,8 @@
 // accessible in its scope. This object contains all the information
 // about the current PR.
 
+// dependencies: lodash4
+
 /*global _ review:true*/
 
 const descriptions = []
@@ -16,7 +18,7 @@ const descriptions = []
 // Approval by username
 const approvals = []
 _.each(_.sortBy(review.sentiments, 'timestamp'), function(sentiment) {
-  const emojis = _.indexBy(sentiment.emojis)
+  const emojis = _.keyBy(sentiment.emojis)
   if (emojis.lgtm || emojis.lgtm_strong) {
     approvals.push(sentiment.username)
   }
