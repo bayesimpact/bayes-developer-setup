@@ -27,6 +27,8 @@ workflows:
           filters:
             tags:
               only: /.*/
+            branches:
+              only: /.*/
       - ping-to-slack:
           context: Slack
           filters:
