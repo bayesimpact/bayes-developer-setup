@@ -29,6 +29,12 @@ Given(/^I create a "([^"]+)" git branch from "([^"]+)"$/) do |branch_name, origi
   step %(I successfully run `git checkout -b "#{branch_name}" "#{origin_branch}"`)
 end
 
+Given(/^I commit a file "([^"]*)" with message "([^"]*)" and content:$/) do |file_name, message, content|
+  step %(a file named "#{file_name}" with:), content
+  step %(I successfully run `git add "#{file_name}"`)
+  step %(I successfully run `git commit -m "#{message}"`)
+end
+
 Given(/^I commit a file "([^"]+)" with:$/) do |file_name, content|
   step %(a file named "#{file_name}" with:), content
   step %(I successfully run `git add "#{file_name}"`)
