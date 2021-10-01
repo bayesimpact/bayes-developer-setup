@@ -14,6 +14,15 @@
 # To install it, copy it or link it from /usr/local/bin/git-submit and gzip the
 # manpage to /usr/local/man/man1.
 
+if [ -n "$GIT_SUBMIT_EXPERIMENTAL_PYTHON" ]; then
+  if shopt -po xtrace > /dev/null; then
+    readonly XTRACE='--xtrace ++'
+  fi
+  python3 "$(dirname "${BASH_SOURCE[0]}")/git-submit.py" $XTRACE "$@"
+  exit $?
+fi
+
+
 source "$(dirname $0)/echo_with_colors.sh"
 
 # Parse the command line arguments.
