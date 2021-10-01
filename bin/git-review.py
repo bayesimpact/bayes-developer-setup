@@ -17,6 +17,7 @@ import itertools
 import json
 import logging
 import os
+from os import path
 import platform
 import re
 import subprocess
@@ -502,6 +503,8 @@ class _RemoteGitPlatform:
             return _GitlabPlatform(gitlab_match[1])
         if github_match := _GITHUB_URL_REGEX.match(remote_url):
             return _GithubPlatform(github_match[1])
+        if remote_url.startswith('/'):
+            return _LocalPlatform(path.basename(remote_url))
         raise NotImplementedError(f'Review platform not recognized. Remote URL is {remote_url}')
 
     def get_engineers_team_id(self) -> str:
@@ -735,6 +738,18 @@ class _GithubPlatform(_RemoteGitPlatform):
             pr.head
             for pr in _GithubPullRequest.fetch_all()
             if self.username in pr.reviewers]
+
+
+class _LocalPlatform(_RemoteGitPlatform):
+
+    _platform = 'local remote'
+
+    def _request_review(self, refs: _References, reviewers: List[str], message: Optional[str]) \
+            -> None:
+        ...
+
+    def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
+        return None
 
 
 @functools.lru_cache()
