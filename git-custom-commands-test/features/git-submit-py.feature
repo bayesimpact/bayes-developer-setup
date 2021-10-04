@@ -2,6 +2,7 @@ Feature: git submit
 
   Background:
     Given I set the environment variable "NO_GIT_SUBMIT_EXPERIMENTAL" to "1"
+    Given I set the environment variable "GIT_SUBMIT_EXPERIMENTAL_PYTHON" to "1"
 
   Scenario: Successful submission
     Given a dummy git repo in "origin"
@@ -73,7 +74,8 @@ Feature: git submit
     And I successfully run `git push -u origin success`
     When I run `git submit`
     Then the exit status should not be 0
-    And the output should contain "Merge conflict"
+    And the output should contain "failed"
+    And the output should contain "merge"
     And I should be on "success" git branch
     And the "success" git branch in "origin" should still exist
     And the "main" git branch should be in sync with "main^" in "origin"
