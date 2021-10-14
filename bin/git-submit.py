@@ -127,6 +127,9 @@ def _graphql(query: str, **kwargs: str) -> dict[str, Any]:
 
 # TODO(cyrille): Add timeout/1char possibilities.
 def _ask_yes_no(question: str) -> bool:
+    if not sys.stdin.isatty():
+        print(f'{question} Answering N, since not a TTY.')
+        return False
     answer = input(f'{question} [y/N]')
     return answer.lower().startswith('y')
 
