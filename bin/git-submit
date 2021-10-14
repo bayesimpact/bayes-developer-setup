@@ -208,7 +208,7 @@ function get_pr_info {
           nodes {
             id
             number
-            mergeStateStatus
+            mergeable
             viewerCanEnableAutoMerge
             viewerCanDisableAutoMerge
             autoMergeRequest {enabledAt}
@@ -232,7 +232,7 @@ function get_pr_info {
   fi
   if [[ $GIT_SUBMIT_AUTO_MERGE == 1 ]] &&
     jq -e '.pullRequests.nodes[0] | (
-      .mergeStateStatus == "CLEAN" or
+      .mergeable == "MERGEABLE" or
       .viewerCanEnableAutoMerge or
       .viewerCanDisableAutoMerge
     ) | not' <<< "$repo_info" > /dev/null; then
