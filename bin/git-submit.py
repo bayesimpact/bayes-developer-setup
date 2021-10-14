@@ -109,7 +109,7 @@ _QUERY_GET_PR_INFOS = '''query IsAutoMergeable($headRefName: String!) {
       nodes {
         id
         number
-        mergeStateStatus
+        mergeable
         viewerCanEnableAutoMerge
         viewerCanDisableAutoMerge
         autoMergeRequest {enabledAt}
@@ -314,7 +314,7 @@ def get_pr_info(branch: str, should_auto_merge: bool = bool(_GIT_SUBMIT_AUTO_MER
         return None
     repo_infos = _graphql(_QUERY_GET_PR_INFOS, headRefName=branch)['data']['repository']
     raw_pr_infos = repo_infos['pullRequests']['nodes'][0]
-    can_auto_merge = raw_pr_infos['mergeStateStatus'] == 'CLEAN' or \
+    can_auto_merge = raw_pr_infos['mergeable'] == 'MERGEABLE' or \
         raw_pr_infos['viewerCanEnableAutoMerge'] or \
         raw_pr_infos['viewerCanDisableAutoMerge']
     will_auto_merge = bool(raw_pr_infos['autoMergeRequest']['enabledAt'])
