@@ -27,6 +27,10 @@ source "$(dirname $0)/echo_with_colors.sh"
 
 function answers_yes {
   local answer
+  if ! tty && [[ $- != *i* ]]; then
+    >&2 echo "$1 Answering N since not a TTY."
+    return 1
+  fi
   read -t5 -n1 -rp "$1 [y/N]" answer
   [[ $answer == y ]] || [[ $answer == Y ]]
 }

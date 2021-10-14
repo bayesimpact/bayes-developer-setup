@@ -37,6 +37,18 @@ Feature: git submit
     And the "main" git branch should be in sync with "main" in "origin"
     And the file "successful submission" should exist
 
+  Scenario: Bypass Y/N questions
+    Given a dummy git repo in "origin"
+    And I am in a "work" git repo cloned from "origin"
+    And I create a "success" git branch from "main"
+    And I commit a file "successful submission" with:
+      """
+      Whatever
+      """
+    When I run `git submit`
+    Then the exit status should not be 0
+    And the output should contain "not a TTY"
+
   Scenario: Branch to submit is late compared to origin/main
     Given a dummy git repo in "origin"
     And I am in a "work" git repo cloned from "origin"
