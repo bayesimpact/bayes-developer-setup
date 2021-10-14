@@ -6,6 +6,7 @@ import functools
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,7 @@ from typing import Any, NoReturn, Optional, Sequence, Union
 
 # Whether we should print each command before running it (bash xtrace), and the prefix to use.
 _XTRACE_PREFIX: list[str] = []
+_IFS_REGEX = re.compile(r'[ \n]')
 
 
 def _xtrace(command: Sequence[str]) -> None:
@@ -22,7 +24,7 @@ def _xtrace(command: Sequence[str]) -> None:
     sys.stderr.write(
         f'{_XTRACE_PREFIX[0]} ' +
         ' '.join(
-            f'"{word}"' if ' ' in word else word
+            f"'{word}'" if _IFS_REGEX.search(word) else word
             for word in command
         ) + '\n')
 

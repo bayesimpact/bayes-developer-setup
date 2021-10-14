@@ -8,7 +8,6 @@ with the specified reviewers (if any).
 """
 
 import argparse
-import collections
 import datetime
 import functools
 import getpass
@@ -23,8 +22,7 @@ import re
 import subprocess
 import sys
 import typing
-from typing import Any, Callable, Dict, List, Literal, NoReturn, Optional, Set, Tuple, TypedDict, \
-    Union
+from typing import Any, Callable, Dict, List, NoReturn, Optional, Sequence, Set, TypedDict, Union
 import unicodedata
 
 try:
@@ -124,7 +122,8 @@ _WORD_REGEX = re.compile(r'\w+')
 # Default value for the browse action.
 _BROWSE_CURRENT = '__current__browse__'
 # Whether we should print each command before running it (bash xtrace), and the prefix to use.
-_XTRACE_PREFIX = []
+_XTRACE_PREFIX: list[str] = []
+_IFS_REGEX = re.compile(r'[ \n]')
 
 _CACHE_BUSTER: List[str] = []
 
@@ -147,14 +146,15 @@ class _ScriptError(ValueError):
         return sum((ord(char) - 64) * 53 ** i for i, char in enumerate(self._stable_message))
 
 
-def _xtrace(command: List[str]) -> None:
-    if _XTRACE_PREFIX:
-        sys.stderr.write(
-            f'{_XTRACE_PREFIX[0]} ' +
-            ' '.join(
-                f'"{word}"' if ' ' in word else word
-                for word in command
-            ) + '\n')
+def _xtrace(command: Sequence[str]) -> None:
+    if not _XTRACE_PREFIX:
+        return
+    sys.stderr.write(
+        f'{_XTRACE_PREFIX[0]} ' +
+        ' '.join(
+            f"'{word}'" if _IFS_REGEX.search(word) else word
+            for word in command
+        ) + '\n')
 
 
 def _run_git(command: List[str], **kwargs: Any) -> str:
