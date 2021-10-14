@@ -25,6 +25,12 @@ fi
 
 source "$(dirname $0)/echo_with_colors.sh"
 
+function answers_yes {
+  local answer
+  read -t5 -n1 -rp "$1 [y/N]" answer
+  [[ $answer == y ]] || [[ $answer == Y ]]
+}
+
 # Parse the command line arguments.
 POSITIONAL=()
 while [[ $# -gt 0 ]]
@@ -222,8 +228,7 @@ function get_pr_info {
     .autoMergeRequest.enabledAt
   ))' <<< "$repo_info" > /dev/null; then
     echo_warning "WARNING: The remote branch won't be deleted after auto-merge."
-    read -t5 -n1 -p "Do you want to update your repository's settings? [y/N]" answer
-    if [[ $answer == [yY] ]]; then
+    if answers_yes "Do you want to update your repository's settings?"; then
       hub api "repos/{owner}/{repo}" -X PATCH -F delete_branch_on_merge=true
     else
       echo_info "You can still do it from this page:"
@@ -297,12 +302,11 @@ if [ -n "$CAN_USE_HUB" ]; then
         GIT_SUBMIT_AUTO_MERGE=0
       fi
       if [ -z "$GIT_SUBMIT_AUTO_MERGE" ]; then
-        read -n1 -p "Do you want to enable auto-merge? [y/N]" answer
-        echo ''
-        echo_info "You can avoid this question by setting GIT_SUBMIT_AUTO_MERGE to 0 or 1 in your environment."
-        if [ "${answer}" == "y" ] || [ "${answer}" == "Y" ]; then
+        if answers_yes "Do you want to enable auto-merge?"; then
           GIT_SUBMIT_AUTO_MERGE=1
         fi
+        echo ''
+        echo_info "You can avoid this question by setting GIT_SUBMIT_AUTO_MERGE to 0 or 1 in your environment."
       fi
       if [[ "$GIT_SUBMIT_AUTO_MERGE" != "1" ]]; then
         echo_info 'Use "-f" if you want to force submission.'
@@ -362,8 +366,7 @@ while [ "${BASE_DEFAULT}" != "$(git rev-parse "${BRANCH}^")" ]; do
     if [[ -z "${NO_SQUASH_ON_GITHUB}" ]]; then
       exit 12
     fi
-    read -p "Rebase now? [y/N]" answer
-    if [ "${answer}" == "y" ] || [ "${answer}" == "Y" ]; then
+    if answers_yes "Rebase now?"; then
       if ! (git rebase -i "${BASE_BRANCH}" "${BRANCH}"); then
         git rebase --abort
         exit 9
@@ -378,8 +381,7 @@ done
 if [ -z "${BRANCH_REMOTE}" ]; then
   echo_warning "The branch ${BRANCH} is not tracked and has probably never been reviewed."
   echo_info "  git push -u ${BASE_REMOTE} ${BRANCH}"
-  read -p "Push now? [y/N]" answer
-  if [ "${answer}" == "y" ] || [ "${answer}" == "Y" ]; then
+  if answers_yes "Push now?"; then
     git push -u ${BASE_REMOTE} ${BRANCH} || abort
   fi
   exit 5
