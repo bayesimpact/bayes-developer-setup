@@ -7,7 +7,9 @@ services:
     volumes:
       - ./git-custom-commands-test:/test
       - ./bin/git-review:/usr/bin/git-review
+      - ./bin/git-review.py:/usr/bin/git-review.py
       - ./bin/git-submit:/usr/bin/git-submit
+      - ./bin/git-submit.py:/usr/bin/git-submit.py
   test-hooks:
     build:
       context: .
