@@ -2,7 +2,6 @@ Feature: git review
 
   Background:
     Given I set the environment variable "GIT_REVIEW_EXPERIMENTAL_PYTHON" to "1"
-    And I run `git config --global user.email username@example.com`
 
   Scenario: Create a branch on main
     Given a dummy git repo in "origin"
