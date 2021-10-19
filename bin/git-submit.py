@@ -18,23 +18,26 @@ _XTRACE_PREFIX: list[str] = []
 _IFS_REGEX = re.compile(r'[ \n]')
 
 
-def _xtrace(command: Sequence[str]) -> None:
-    if not _XTRACE_PREFIX:
+def _xtrace(command: Sequence[str], *, prefix_cache: list[str] = _XTRACE_PREFIX) -> None:
+    if not prefix_cache:
         return
     sys.stderr.write(
-        f'{_XTRACE_PREFIX[0]} ' +
+        f'{prefix_cache[0]} ' +
         ' '.join(
             f"'{word}'" if _IFS_REGEX.search(word) else word
             for word in command
         ) + '\n')
 
 
-def _run(*args: str) -> str:
+def _run(*args: str, silently: bool = False) -> str:
     _xtrace(args)
     try:
-        return subprocess.check_output(args, text=True).strip()
+        return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT).strip()
     except subprocess.CalledProcessError as error:
-        logging.error(error.output)
+        if not silently:
+            logging.error('An error occurred while running:')
+            _xtrace(args, prefix_cache=['>'])
+            logging.error(error.output.strip())
         raise
 
 
@@ -79,7 +82,7 @@ _MUTATION_REACT_TO_AUTO_MERGE = f'''mutation ReactComment($pullRequestId: ID!) {
     }}
   }}
 }}'''
-_MUTATION_DISABLE_AUTO_MERGE = ''''mutation CancelAutoMerge($pullRequestId: ID!) {
+_MUTATION_DISABLE_AUTO_MERGE = '''mutation CancelAutoMerge($pullRequestId: ID!) {
   disablePullRequestAutoMerge(input: {pullRequestId: $pullRequestId}) {
     pullRequest {viewerCanEnableAutoMerge}
   }
@@ -196,7 +199,7 @@ class _Branch(typing.NamedTuple):
 
 def _is_git_clean() -> bool:
     try:
-        _run('git', 'diff', 'HEAD', '--exit-code')
+        _run('git', 'diff', 'HEAD', '--exit-code', silently=True)
         return True
     except subprocess.CalledProcessError:
         return False
@@ -204,17 +207,18 @@ def _is_git_clean() -> bool:
 
 def _get_base_remote() -> str:
     try:
-        return _run('git', 'config', 'branch.main.remote')
+        return _run('git', 'config', 'branch.main.remote', silently=True)
     except subprocess.CalledProcessError:
         try:
-            return _run('git', 'config', 'branch.master.remote')
+            return _run('git', 'config', 'branch.master.remote', silently=True)
         except subprocess.CalledProcessError:
             return 'origin'
 
 
 def _get_remote_head(base_remote: str) -> str:
     try:
-        return _run('git', 'rev-parse', '--abbrev-ref', f'{base_remote}/HEAD').split('/')[1]
+        return _run(
+            'git', 'rev-parse', '--abbrev-ref', f'{base_remote}/HEAD', silently=True).split('/')[1]
     except subprocess.CalledProcessError:
         pass
     if _can_use_hub():
@@ -233,7 +237,7 @@ def _get_default_branch() -> _Branch:
     full_remote_head = f'{base_remote}/{remote_head}'
     for branch in _run('git', 'for-each-ref', '--format=%(refname:short)', 'refs/heads').split('\n'):
         try:
-            remote = _run('git', 'rev-parse', '--abbrev-ref', f'{branch}@{{upstream}}')
+            remote = _run('git', 'rev-parse', '--abbrev-ref', f'{branch}@{{upstream}}', silently=True)
         except subprocess.CalledProcessError:
             continue
         if remote == full_remote_head:
@@ -266,11 +270,11 @@ def _get_branch(branch: str, default: _Branch, prefix: Optional[str]) -> _Branch
     # Ensures that current dir is clean.
     _check_clean_state(branch, default.local, prefix)
     try:
-        remote = _run('git', 'config', f'branch.{branch}.remote')
+        remote = _run('git', 'config', f'branch.{branch}.remote', silently=True)
     except subprocess.CalledProcessError:
         if prefix:
             _run('git', 'fetch')
-            _run('git', branch, '-t', f'{remote}/{prefix}{branch}')
+            _run('git', 'branch', branch, '-t', f'{prefix}{branch}')
             remote = default.remote
         else:
             remote = ''
@@ -320,7 +324,7 @@ def get_pr_info(branch: str, should_auto_merge: bool = bool(_GIT_SUBMIT_AUTO_MER
     can_auto_merge = raw_pr_infos['mergeable'] == 'MERGEABLE' or \
         raw_pr_infos['viewerCanEnableAutoMerge'] or \
         raw_pr_infos['viewerCanDisableAutoMerge']
-    will_auto_merge = bool(raw_pr_infos['autoMergeRequest']['enabledAt'])
+    will_auto_merge = bool((raw_pr_infos['autoMergeRequest'] or {}).get('enabledAt'))
     pr_infos = _PrInfos(_AutoMerge(
         is_enabled=will_auto_merge,
         can_enable=raw_pr_infos['viewerCanEnableAutoMerge'],
@@ -361,7 +365,7 @@ def _check_clean_state(branch: str, default_branch: str, remote_prefix: Optional
     if remote_prefix:
         return
     try:
-        _run('git', 'rev-parse', '--verify', branch)
+        _run('git', 'rev-parse', '--verify', branch, silently=True)
     except subprocess.CalledProcessError:
         logging.error('%s is not a valid branch', branch)
         _show_available_branches(default_branch)
@@ -373,9 +377,11 @@ def _should_auto_merge(branch: str, should_force: bool, pr_infos: Optional[_PrIn
 
     if not pr_infos:
         return False
-    ci_status = _run('hub', 'ci-status', branch)
-    if ci_status == 'success':
+    try:
+        _run('hub', 'ci-status', branch, silently=True)
         return False
+    except subprocess.CalledProcessError as error:
+        ci_status = error.output
     if should_force:
         logging.warning('forcing submission despite CI status "%s".', ci_status)
         return bool(_GIT_SUBMIT_AUTO_MERGE)
@@ -391,10 +397,8 @@ def _should_auto_merge(branch: str, should_force: bool, pr_infos: Optional[_PrIn
             'You can avoid this question by setting %s to 0 or 1 in your environment.',
             _AUTO_MERGE_ENV_NAME)
     if not should_auto_merge:
-        logging.info(
-            'Use "-f" if you want to force submission.\n%s',
-            _run('hub', 'ci-status', '-v', branch))
-        sys.exit(11)
+        logging.info('Use "-f" if you want to force submission.')
+        _run('hub', 'ci-status', '-v', branch)
     return should_auto_merge
 
 
@@ -436,7 +440,7 @@ def abort(*branches: _Branch) -> NoReturn:
 
 def _is_ancestor(ref1: str, ref2: str) -> bool:
     try:
-        _run('git', 'merge-base', '--is-ancestor', ref1, ref2)
+        _run('git', 'merge-base', '--is-ancestor', ref1, ref2, silently=True)
         return True
     except subprocess.CalledProcessError:
         return False
@@ -451,7 +455,8 @@ def _rebase_or_fail(onto: str, branch: str, *, interactive: bool = False) -> Non
         raise
 
 
-def _handle_rebase(default: _Branch, branch: _Branch) -> None:
+# TODO(cyrille): Use force for git submit --rebase.
+def _handle_rebase(default: _Branch, branch: _Branch, force: bool = False) -> None:
     """Check that the changes are bundled as one commit on top of origin/default_branch."""
 
     penultimate = _Branch.get_sha1(f'{branch.local}^')
@@ -466,16 +471,16 @@ def _handle_rebase(default: _Branch, branch: _Branch) -> None:
         logging.warning(
             'You should first group all your changes in one commit:\n\tgit rebase -i "%s" "%s"',
             default.tracked, branch.local)
-        if _SQUASH_ON_GITHUB:
+        if not force and _SQUASH_ON_GITHUB:
             sys.exit(12)
-        if not _ask_yes_no('Rebase now?'):
+        if not force and not _ask_yes_no('Rebase now?'):
             sys.exit(4)
         _rebase_or_fail(default.tracked, branch.local, interactive=True)
         penultimate = _Branch.get_sha1(f'{branch.local}^')
 
 
 def _push_to_remote(*, branch: _Branch, default: Optional[_Branch] = None, silently: bool = False) \
-        -> NoReturn:
+        -> None:
     if default:
         msg = 'is not tracked and has probably never been reviewed.'
         cmd = ('git', 'push', '-u', default.remote, branch.local)
@@ -538,10 +543,10 @@ def main() -> None:
     remote_prefix = f'{default.remote}/{args.user}-' if args.abort else None
     branch = _get_branch(args.branch, default, remote_prefix)
     pr_infos = get_pr_info(branch.merge)
-    should_auto_merge = _should_auto_merge(args.branch, args.force, pr_infos)
     if args.abort:
         abort_submit(args.branch, pr_infos)
         return
+    should_auto_merge = _should_auto_merge(args.branch, args.force, pr_infos)
     _run('git', 'fetch')
     default = default.with_initial(default.tracked)
     _handle_rebase(default, branch)
