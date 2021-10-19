@@ -15,7 +15,7 @@
 # manpage to /usr/local/man/man1.
 
 if [ -n "$GIT_SUBMIT_EXPERIMENTAL_PYTHON" ]; then
-  if shopt -po xtrace > /dev/null; then
+  if shopt -pqo xtrace; then
     readonly XTRACE='--xtrace ++'
   fi
   python3 "$(dirname "${BASH_SOURCE[0]}")/git-submit.py" $XTRACE "$@"
