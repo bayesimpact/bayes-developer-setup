@@ -104,3 +104,21 @@ Feature: git submit
     When I run `git submit`
     Then the exit status should be 0
     And I should be on "default" git branch
+
+  Scenario: Abort a submission
+    Given a dummy git repo in "origin"
+    And I am in a "work" git repo cloned from "origin"
+    And I create a "success" git branch from "main"
+    And I commit a file "successful submission" with:
+    """
+    Whatever
+    """
+    And I run `bash -c 'echo $-'`
+    When I run `git push -u origin success:cyrille-success`
+    Then the exit status should be 0
+    And I successfully run `git checkout main`
+    And I successfully run `git branch -D success`
+    And I run `git submit -u cyrille -a success`
+    Then the exit status should be 0
+    And I should be on "success" git branch
+    And the "success" git branch should be in sync with "cyrille-success" in "origin"
