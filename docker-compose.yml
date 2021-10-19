@@ -2,6 +2,8 @@ version: "2"
 services:
   test:
     build:
+      args:
+        - SKIP_TEST
       context: .
       dockerfile: git-custom-commands-test/Dockerfile
     volumes:
