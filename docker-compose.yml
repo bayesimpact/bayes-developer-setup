@@ -3,7 +3,7 @@ services:
   test:
     build:
       args:
-        - SKIP_TEST
+        - SKIP_TESTe
       context: .
       dockerfile: git-custom-commands-test/Dockerfile
     volumes:
