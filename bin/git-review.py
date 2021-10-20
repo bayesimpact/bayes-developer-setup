@@ -32,14 +32,11 @@ try:
     class LuccaSession(requests.Session):
         """A connected session to the Lucca API."""
 
-        def __init__(
-                self, base_url: str, token: Optional[str], *,
-                on_refresh: Callable[['LuccaSession'], None]) -> None:
+        def __init__(self, base_url: str, token: Optional[str]) -> None:
             super().__init__()
             self._base_url = base_url
             if token:
                 self.cookies.set('authToken', token)
-            self._on_refresh = on_refresh
 
         def get(
                 self, url: str, *,
@@ -52,7 +49,7 @@ try:
             except exceptions.HTTPError:
                 LoginHTMLParser('identity/login', self).\
                     get_token(input('Lucca login:'), getpass.getpass())
-                self._on_refresh(self)
+                _GIT_CONFIG.lucca_session = self
             return super().get(url, params=params)
 
         def get_ooos_on(self, *, half_day_offset: int = 0) -> set[str]:
@@ -314,8 +311,7 @@ class _GitConfig:
         if not base_url:
             return None
         token = self.get_config('review.lucca.token', is_global=True)
-        session = LuccaSession(
-            base_url, token, on_refresh=lambda s: setattr(self, 'lucca_session', s))
+        session = LuccaSession(base_url, token)
         return session
 
     @lucca_session.setter
