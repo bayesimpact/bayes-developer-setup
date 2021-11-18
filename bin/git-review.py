@@ -478,14 +478,20 @@ def _run_git_review_hook(refs: _References, reviewers: List[str]) -> str:
 
     hook_script = f'{_run_git(["rev-parse", "--show-toplevel"])}/.git-review-hook'
     if not os.access(hook_script, os.X_OK):
+        if path.exists(hook_script):
+            logging.warning('The git review hook exists but is not executable. Ignoring.')
         return ''
     _xtrace([hook_script])
-    return subprocess.check_output(hook_script, text=True, env=dict(os.environ, **{
-        'BRANCH': refs.branch,
-        'MERGE_BASE': refs.merge_base,
-        'REMOTE_BRANCH': refs.remote,
-        'REVIEWER': ','.join(reviewers),
-    })).strip()
+    try:
+        return subprocess.check_output(hook_script, text=True, env=dict(os.environ, **{
+            'BRANCH': refs.branch,
+            'MERGE_BASE': refs.merge_base,
+            'REMOTE_BRANCH': refs.remote,
+            'REVIEWER': ','.join(reviewers),
+        })).strip()
+    except OSError as error:
+        logging.error('Unable to run the review hook. Ignoring', exc_info=error)
+        return ''
 
 
 class _RemoteGitPlatform:
