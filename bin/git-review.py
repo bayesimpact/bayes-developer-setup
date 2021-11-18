@@ -729,7 +729,7 @@ class _GithubPlatform(_RemoteGitPlatform):
     def username(self) -> str:
         """The handle for the current Github user."""
 
-        with open(f'{os.getenv("HOME")}/.config/hub') as hub_config:
+        with open(path.expanduser('~/.config/hub'), encoding='utf-8') as hub_config:
             user_line = next(line for line in hub_config.readlines() if 'user' in line)
         return user_line.split(':')[1].strip()
 
