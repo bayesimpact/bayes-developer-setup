@@ -849,12 +849,20 @@ def _get_default_username(username: str) -> str:
     raise _ScriptError('Please, set your email in git config.')
 
 
+_OPEN_URL_COMMAND = {
+    'Darwin': 'open',
+    'Windows': 'start',
+}
 def _browse_to(branch: str) -> None:
     real_branch = _get_existing_remote() or _get_head() if branch == _BROWSE_CURRENT else branch
     url = _get_platform().get_review_url_for(real_branch or branch)
-    open_command = 'open' if platform.system() == 'Darwin' else 'xdg-open'
+    open_command = _OPEN_URL_COMMAND.get(platform.system(), 'xdg-open')
     _xtrace(open_command)
-    subprocess.check_output([open_command, url])
+    try:
+        subprocess.check_output([open_command, url])
+    except FileNotFoundError:
+        logging.error('Unable to open URL %s', url)
+        raise
 
 
 def main(string_args: Optional[List[str]] = None) -> None:
