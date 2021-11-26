@@ -2,19 +2,35 @@
 #
 # Check the staged changes before committing them.
 
-. "$(git --exec-path)/git-sh-setup"  # for die
-readonly CIRCLE_CI_CONFIG="$(git rev-parse --show-toplevel)/.circleci/config.yml"
+. "$(git --exec-path)/git-sh-setup"  # for cd_to_toplevel, die, say
+cd_to_toplevel
 
-if [ -f "$CIRCLE_CI_CONFIG" ]; then
+function check_circle_config() {
+  local config=".circleci/config.yml"
+  if [ ! -f $config ]; then
+    >&2 say "Not a CircleCI repo."
+    return
+  fi
   if ! command -v circleci > /dev/null && [ -z "$PRECOMMIT_NO_CIRCLECI_WARNING" ]; then
-    echo "It looks like you're using CircleCI,
+    >&2 say "It looks like you're using CircleCI,
       but its configuration validating tool is not installed."
-    echo "To check configuration changes before committing them, please run 'npm -g i circleci'."
-    echo "To avoid showing this message again, please set 'PRECOMMIT_NO_CIRCLECI_WARNING=1'"
-    exit
+    >&2 say "To check configuration changes before committing them, please run 'npm -g i circleci'."
+    >&2 say "To avoid showing this message again, please set 'PRECOMMIT_NO_CIRCLECI_WARNING=1'"
+    return
   fi
   # Validate the Circle CI config, if it changed.
-  git diff-index --quiet -p -M HEAD -- "$CIRCLE_CI_CONFIG" ||
-    circleci config validate "$CIRCLE_CI_CONFIG" > /dev/null ||
-    die "CircleCI config is not valid."
+  git diff-index --cached --quiet -M HEAD -- $config ||
+    circleci config validate $config > /dev/null ||
+    echo "CircleCI config is not valid."
+}
+
+#TODO(cyrille): Add other validators.
+
+readonly MESSAGE_FILE="$(mktemp)"
+check_circle_config >> "$MESSAGE_FILE"
+
+if [ -s "$MESSAGE_FILE" ]; then
+  readonly MSG="$(cat $MESSAGE_FILE)"
+  rm "$MESSAGE_FILE"
+  die "$MSG"
 fi
