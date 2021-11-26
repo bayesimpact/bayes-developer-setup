@@ -5,7 +5,17 @@
 . "$(git --exec-path)/git-sh-setup"  # for cd_to_toplevel, die, say
 cd_to_toplevel
 
+function diff_files() {
+  local params=()
+  while [ -n "$1" ] && [[ "$1" != "--" ]]; do
+    params+="$1"
+    shift
+  done
+  git diff-index --cached "${params[@]}" -M HEAD "$@"
+}
+
 function check_circle_config() {
+  # TODO(cyrille): Allow ignoring this using GIT_COMMIT_IGNORE_CIRCLECI
   local config=".circleci/config.yml"
   if [ ! -f $config ]; then
     >&2 say "Not a CircleCI repo."
@@ -19,15 +29,31 @@ function check_circle_config() {
     return
   fi
   # Validate the Circle CI config, if it changed.
-  git diff-index --cached --quiet -M HEAD -- $config ||
-    circleci config validate $config > /dev/null ||
+  diff_files --quiet -- $config || circleci config validate $config > /dev/null ||
     echo "CircleCI config is not valid."
 }
 
-#TODO(cyrille): Add other validators.
+function check_bazel_build() {
+  if [ -z "$GIT_COMMIT_IGNORE_BAZEL" -o ! -f "WORKSPACE" ]; then
+    >&2 say "Not a Bazel workspace."
+    return
+  fi
+  local changed_builds=$(mktemp) changed_imports=$(mktemp) unchanged_builds
+  diff_files --name-only -- '**/BUILD' > "$changed_builds"
+  diff_files --name-only -G'^(|from \S* )import.*' | sed 's|/[^/]+$|/BUILD|' > "$changed_imports"
+  unchanged_builds="$(sort "$changed_imports" "$changed_builds" "$changed_builds" | uniq -u)"
+  rm "$changed_builds" "$changed_imports"
+  if [ -z "$unchanged_builds" ]; then
+    return
+  fi
+  >&2 say "BUILD files to updates:"
+  >&2 say "$unchanged_builds"
+  echo 'It looks like some of your import changes were not reported to Bazel. Rerun `git commit` with GIT_COMMIT_IGNORE_BAZEL=1 to ignore this hook.'
+}
 
 readonly MESSAGE_FILE="$(mktemp)"
 check_circle_config >> "$MESSAGE_FILE"
+check_bazel_build >> "$MESSAGE_FILE"
 
 if [ -s "$MESSAGE_FILE" ]; then
   readonly MSG="$(cat $MESSAGE_FILE)"
