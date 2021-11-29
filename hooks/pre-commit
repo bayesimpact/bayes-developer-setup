@@ -15,9 +15,8 @@ function diff_files() {
 }
 
 function check_circle_config() {
-  # TODO(cyrille): Allow ignoring this using GIT_COMMIT_IGNORE_CIRCLECI
   local config=".circleci/config.yml"
-  if [ ! -f $config ]; then
+  if [ -n "$GIT_COMMIT_IGNORE_CIRCLECI" ] || [ ! -f $config ]; then
     >&2 say "Not a CircleCI repo."
     return
   fi
@@ -39,7 +38,7 @@ function set_difference() {
 }
 
 function check_bazel_build() {
-  if [ -z "$GIT_COMMIT_IGNORE_BAZEL" -o ! -f "WORKSPACE" ]; then
+  if [ -n "$GIT_COMMIT_IGNORE_BAZEL" ] || [ ! -f "WORKSPACE" ]; then
     >&2 say "Not a Bazel workspace."
     return
   fi
