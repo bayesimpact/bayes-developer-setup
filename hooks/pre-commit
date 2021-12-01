@@ -8,7 +8,7 @@ cd_to_toplevel
 function diff_files() {
   local params=()
   while [ -n "$1" ] && [[ "$1" != "--" ]]; do
-    params+="$1"
+    params+=("$1")
     shift
   done
   git diff-index --cached "${params[@]}" -M HEAD "$@"
@@ -47,12 +47,18 @@ function check_bazel_build() {
   diff_files --name-only -G'^(|from \S* )import.*' | sed -E 's|/[^/]+$|/BUILD|' | uniq > "$changed_imports"
   untouched_build_files="$(set_difference "$changed_imports" "$changed_builds")"
   rm "$changed_builds" "$changed_imports"
-  if [ -z "$untouched_build_files" ]; then
+  if [ -n "$untouched_build_files" ]; then
+    >&2 say "BUILD files to updates:"
+    >&2 say "$untouched_build_files"
+    echo 'It looks like some of your import changes were not reported to Bazel. Rerun `git commit` with GIT_COMMIT_IGNORE_BAZEL=1 to ignore this hook.'
     return
   fi
-  >&2 say "BUILD files to updates:"
-  >&2 say "$untouched_build_files"
-  echo 'It looks like some of your import changes were not reported to Bazel. Rerun `git commit` with GIT_COMMIT_IGNORE_BAZEL=1 to ignore this hook.'
+  if ! command -v bazel > /dev/null || test ! -s "$changed_builds" || test ! -f '.circleci/BUILD'; then
+    return
+  fi
+  if ! bazel query 'deps(//.circleci/...)' > /dev/null; then
+    echo 'Bazel resolution failed'
+  fi
 }
 
 readonly MESSAGE_FILE="$(mktemp)"
