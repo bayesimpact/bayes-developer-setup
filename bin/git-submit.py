@@ -141,6 +141,7 @@ class _Arguments(typing.Protocol):
     abort: bool
     branch: str
     force: bool
+    rebase: bool
     user: str
     xtrace: Optional[str]
 
@@ -278,8 +279,7 @@ def _get_branch(branch: str, default: _Branch, prefix: Optional[str]) -> _Branch
             remote = default.remote
         else:
             remote = ''
-    merge = remote and _run('git', 'config', f'branch.{branch}.merge').\
-        removeprefix(f'refs/heads/')
+    merge = remote and _run('git', 'config', f'branch.{branch}.merge').removeprefix('refs/heads/')
     initial = _Branch.get_sha1(branch)
     return _Branch(local=branch, remote=remote, merge=merge, initial=initial)
 
@@ -381,7 +381,7 @@ def _should_auto_merge(branch: str, should_force: bool, pr_infos: Optional[_PrIn
         _run('hub', 'ci-status', branch, silently=True)
         return False
     except subprocess.CalledProcessError as error:
-        ci_status = error.output
+        ci_status = error.output.strip()
     if should_force:
         logging.warning('forcing submission despite CI status "%s".', ci_status)
         return bool(_GIT_SUBMIT_AUTO_MERGE)
@@ -446,36 +446,45 @@ def _is_ancestor(ref1: str, ref2: str) -> bool:
         return False
 
 
-def _rebase_or_fail(onto: str, branch: str, *, interactive: bool = False) -> None:
+def _rebase(
+        onto: str, branch: str, *, interactive: bool = False,
+        should_abort_on_conflict: bool = True) -> None:
     cmd = ('git', 'rebase', onto, branch) + (('-i',) if interactive else ())
     try:
         _run(*cmd)
+        return
     except subprocess.CalledProcessError:
-        _run('git', 'rebase', '--abort')
-        raise
+        if should_abort_on_conflict:
+            _run('git', 'rebase', '--abort')
+            raise
+    logging.warning('Please resolve conflicts and run `git rebase --continue`.')
 
 
-# TODO(cyrille): Use force for git submit --rebase.
 def _handle_rebase(default: _Branch, branch: _Branch, force: bool = False) -> None:
     """Check that the changes are bundled as one commit on top of origin/default_branch."""
 
+    abort_on_conflict = not force
+    force = force or not _SQUASH_ON_GITHUB
+    logging.debug('Rebasing "%s" onto "%s"', branch.local, default.initial)
     penultimate = _Branch.get_sha1(f'{branch.local}^')
     while default.initial != penultimate:
         if default.initial == _Branch.get_sha1(branch):
             logging.error('No changes to submit')
             sys.exit(3)
         if _is_ancestor(penultimate, default.initial):
-            if not _SQUASH_ON_GITHUB:
-                _rebase_or_fail(default.tracked, branch.local)
+            if force:
+                _rebase(default.tracked, branch.local, should_abort_on_conflict=abort_on_conflict)
             break
         logging.warning(
             'You should first group all your changes in one commit:\n\tgit rebase -i "%s" "%s"',
             default.tracked, branch.local)
-        if not force and _SQUASH_ON_GITHUB:
+        if not force:
             sys.exit(12)
-        if not force and not _ask_yes_no('Rebase now?'):
+        if not _ask_yes_no('Rebase now?'):
             sys.exit(4)
-        _rebase_or_fail(default.tracked, branch.local, interactive=True)
+        _rebase(
+            default.tracked, branch.local, interactive=True,
+            should_abort_on_conflict=abort_on_conflict)
         penultimate = _Branch.get_sha1(f'{branch.local}^')
 
 
@@ -508,6 +517,7 @@ def _merge_now_or_later(pr_infos: _PrInfos, should_auto_merge: bool, sha1: str) 
         logging.info('GitHub will auto-merge this pull-request once CI is successful.')
         return False
     if not should_auto_merge:
+        logging.info('Merging on GitHub.')
         _run(
             'hub', 'api', '-X', 'PUT', f'/repos/{{owner}}/{{repo}}/pulls/{pr_infos.number}/merge',
             '-F', 'merge_method=squash', '-F', f'sha={sha1}')
@@ -525,14 +535,17 @@ def main() -> None:
     parser.add_argument('--xtrace', '-x', help='''Debug.''')
     parser.add_argument('--force', '-f', action='store_true', help='''
         Forces the submit, regardless of the CI status.''')
-    parser.add_argument('--abort', '-a', action='store_true', help='''
+    parser.add_argument('--abort', '--abort-auto-submit', '-a', action='store_true', help='''
         Cancel any auto-submission.
         Also recreate a branch from origin, without its username prefix.''')
+    parser.add_argument('--rebase', '-r', action='store_true', help='''
+        Rebase the given branch on top of origin/HEAD and try to submit it.''')
     parser.add_argument('--user', '-u', default='', help='''
         Set the prefix for the remote branch to USER. Default is username from the git user's email
         (such as in username@example.com). Only useful for '--abort'.''')
     args: _Arguments = parser.parse_args()
-    if args.abort and not args.user:
+    should_abort_auto_submit = args.abort or args.rebase
+    if should_abort_auto_submit and not args.user:
         args.user = _run('git', 'config', 'user.email').split('@', 1)[0]
     if not args.branch:
         args.branch = _START_BRANCH
@@ -540,30 +553,32 @@ def main() -> None:
         del _XTRACE_PREFIX[:]
         _XTRACE_PREFIX.append(args.xtrace)
     default = _get_default_branch()
-    remote_prefix = f'{default.remote}/{args.user}-' if args.abort else None
+    remote_prefix = f'{default.remote}/{args.user}-' if should_abort_auto_submit else None
     branch = _get_branch(args.branch, default, remote_prefix)
     pr_infos = get_pr_info(branch.merge)
-    if args.abort:
+    if should_abort_auto_submit:
         abort_submit(args.branch, pr_infos)
-        return
-    should_auto_merge = _should_auto_merge(args.branch, args.force, pr_infos)
+        if args.abort:
+            return
     _run('git', 'fetch')
     default = default.with_initial(default.tracked)
-    _handle_rebase(default, branch)
-    print('rebase done. Remote:', branch.remote)
+    _handle_rebase(default, branch, force=args.rebase)
+    logging.info('Branch "%s" has been rebased onto "%s"', branch, default.initial)
+    pr_infos = get_pr_info(branch.merge)
     if not branch.remote:
         _push_to_remote(branch=branch, default=default)
-    if _Branch.get_sha1(branch) != _Branch.get_sha1(branch.tracked):
+    if args.rebase or _Branch.get_sha1(branch) != _Branch.get_sha1(branch.tracked):
         _push_to_remote(branch=branch, silently=True)
     if not _SQUASH_ON_GITHUB or not pr_infos:
         _run('git', 'checkout', default.local)
         try:
-            _rebase_or_fail(branch.local, default.local)
+            _rebase(branch.local, default.local)
             default.push()
         except subprocess.CalledProcessError:
             abort(default, branch)
         branch.clean()
         return
+    should_auto_merge = _should_auto_merge(args.branch, args.force, pr_infos)
     try:
         keep_remote = not _merge_now_or_later(pr_infos, should_auto_merge, branch.initial)
     except subprocess.CalledProcessError:
