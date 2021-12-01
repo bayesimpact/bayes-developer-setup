@@ -44,7 +44,7 @@ function check_bazel_build() {
   fi
   local changed_builds=$(mktemp) changed_imports=$(mktemp) untouched_build_files
   diff_files --name-only -- '**/BUILD' > "$changed_builds"
-  diff_files --name-only -G'^(|from \S* )import.*' | sed 's|/[^/]+$|/BUILD|' | uniq > "$changed_imports"
+  diff_files --name-only -G'^(|from \S* )import.*' | sed -E 's|/[^/]+$|/BUILD|' | uniq > "$changed_imports"
   untouched_build_files="$(set_difference "$changed_imports" "$changed_builds")"
   rm "$changed_builds" "$changed_imports"
   if [ -z "$untouched_build_files" ]; then
