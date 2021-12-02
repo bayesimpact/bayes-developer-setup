@@ -37,23 +37,32 @@ function set_difference() {
   sort "$1" "$2" "$2" | uniq -u
 }
 
-function check_bazel_build() {
-  if [ -n "$GIT_COMMIT_IGNORE_BAZEL" ] || [ ! -f "WORKSPACE" ]; then
+function check_bazel_files() {
+  if [ -n "$GIT_COMMIT_IGNORE_BAZEL_FILES" ] || [ ! -f "WORKSPACE" ]; then
     >&2 say "Not a Bazel workspace."
     return
   fi
-  local changed_builds=$(mktemp) changed_imports=$(mktemp) untouched_build_files
-  diff_files --name-only -- '**/BUILD' > "$changed_builds"
+  local changed_builds=$(mktemp) changed_imports=$(mktemp) untouched_build_files unchanged_tree
+  if diff_files --exit-code --name-only -- '**/BUILD' > "$changed_builds"; then
+    unchanged_tree=1
+  fi
   diff_files --name-only -G'^(|from \S* )import.*' | sed -E 's|/[^/]+$|/BUILD|' | uniq > "$changed_imports"
   untouched_build_files="$(set_difference "$changed_imports" "$changed_builds")"
   rm "$changed_builds" "$changed_imports"
   if [ -n "$untouched_build_files" ]; then
     >&2 say "BUILD files to updates:"
     >&2 say "$untouched_build_files"
-    echo 'It looks like some of your import changes were not reported to Bazel. Rerun `git commit` with GIT_COMMIT_IGNORE_BAZEL=1 to ignore this hook.'
-    return
+    echo 'It looks like some of your import changes were not reported to Bazel.'
+    echo "If you're confident with your changes, rerun 'git commit' with GIT_COMMIT_IGNORE_BAZEL_FILES=1 to ignore this hook."
+    return 1
   fi
-  if ! command -v bazel > /dev/null || test ! -s "$changed_builds" || test ! -f '.circleci/BUILD'; then
+  if test -z "$unchanged_tree"; then
+    return 1
+  fi
+}
+
+function check_bazel_tree() {
+  if [ -n "$GIT_COMMIT_IGNORE_BAZEL" ] || ! command -v bazel > /dev/null || test ! -f '.circleci/BUILD'; then
     return
   fi
   if ! bazel query 'deps(//.circleci/...)' > /dev/null; then
@@ -63,10 +72,12 @@ function check_bazel_build() {
 
 readonly MESSAGE_FILE="$(mktemp)"
 check_circle_config >> "$MESSAGE_FILE"
-check_bazel_build >> "$MESSAGE_FILE"
+if check_bazel_files >> "$MESSAGE_FILE"; then
+  check_bazel_tree >> "$MESSAGE_FILE"
+fi
 
-if [ -s "$MESSAGE_FILE" ]; then
-  readonly MSG="$(cat $MESSAGE_FILE)"
-  rm "$MESSAGE_FILE"
+readonly MSG="$(cat $MESSAGE_FILE)"
+rm "$MESSAGE_FILE"
+if [ -n "$MSG" ]; then
   die "$MSG"
 fi
