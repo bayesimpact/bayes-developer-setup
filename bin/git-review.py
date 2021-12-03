@@ -121,10 +121,20 @@ _GITHUB_URL_REGEX = re.compile(r'^git@github\.com:(.*)\.git')
 _WORD_REGEX = re.compile(r'\w+')
 # Default value for the browse action.
 _BROWSE_CURRENT = '__current__browse__'
+_IFS_REGEX = re.compile(r'[ \n]')
+_MUTATION_REACT_COMMENT = f'''mutation ReactComment($pullRequestId: ID!, $reaction: String!) {{
+  addComment(input: {{body: $reaction, subjectId: $pullRequestId}}) {{
+    commentEdge {{
+      node {{
+        id
+      }}
+    }}
+  }}
+}}'''
+_AUTO_ASSIGN_REACTION = ':game_die:'
+
 # Whether we should print each command before running it (bash xtrace), and the prefix to use.
 _XTRACE_PREFIX: list[str] = []
-_IFS_REGEX = re.compile(r'[ \n]')
-
 _CACHE_BUSTER: List[str] = []
 
 
@@ -176,6 +186,12 @@ def _run_hub(command: List[str], *, cache: Optional[int] = None, **kwargs: Any) 
         final_command.extend(['--cache', str(cache)])
     _xtrace(final_command)
     return subprocess.check_output(final_command, text=True, **kwargs).strip()
+
+
+def _graphql(query: str, **kwargs: str) -> dict[str, Any]:
+    kwargs['query'] = query
+    args = [arg for key, value in kwargs.items() for arg in ('-F', f'{key}={value}')]
+    return typing.cast(dict[str, Any], json.loads(_run_hub(['api', 'graphql', *args])))
 
 
 _GithubAPIReference = TypedDict('_GithubAPIReference', {'ref': str})
@@ -525,16 +541,25 @@ class _RemoteGitPlatform:
 
         return set()
 
-    def request_review(self, refs: _References, reviewers: List[str]) -> None:
+    def request_review(
+            self, refs: _References, reviewers: List[str], is_auto_assigned: bool = False) -> None:
         """Ask for a review on the specific platform."""
 
-        message = None if self._has_existing_review(refs) else _make_pr_message(refs, reviewers)
-        self._request_review(refs, reviewers, message)
+        review_id = self._has_existing_review(refs)
+        if not review_id:
+            message = _make_pr_message(refs, reviewers)
+            review_id = self._request_review(refs, reviewers, message)
         if reviewers:
             # Remove duplicates while preserving ordering.
             recents = list(dict.fromkeys(reviewers + _GIT_CONFIG.recent_reviewers))
             _GIT_CONFIG.recent_reviewers = recents
         self.add_review_label(refs.branch)
+        if is_auto_assigned and review_id:
+            try:
+                self._react_with_auto_assign(review_id)
+            except NotImplementedError as error:
+                logging.warning(
+                    'Unable to show to the reviewer they were auto-assigned.', exc_info=error)
 
     def add_review_label(self, branch: str) -> None:
         """Mark all references issues as 'in review'."""
@@ -552,15 +577,15 @@ class _RemoteGitPlatform:
     def _add_label(self, issue_number: str, label: str) -> None:
         raise self._not_implemented('git review', ' Zube interop')
 
-    def _has_existing_review(self, refs) -> bool:
-        return self._get_review_number(refs.remote) is not None
+    def _has_existing_review(self, refs: _References) -> Optional[str]:
+        return self._get_review_number(refs.remote)
 
     def _not_implemented(self, command: str, context: str = '') -> NoReturn:
         raise NotImplementedError(
             f'`{command}`{context} is not implemented for {self._platform} yet.')
 
     def _request_review(self, refs: _References, reviewers: List[str], message: Optional[str]) \
-            -> None:
+            -> Optional[str]:
         self._not_implemented('git review')
 
     def get_available_reviewers(self) -> Set[str]:
@@ -583,6 +608,9 @@ class _RemoteGitPlatform:
         """List branches the user should review."""
 
         self._not_implemented('git review --browse', ' autocomplete')
+
+    def _react_with_auto_assign(self, review_id: str) -> None:
+        self._not_implemented('git review --auto', ' comment for auto-assign')
 
 
 class _GitlabPlatform(_RemoteGitPlatform):
@@ -621,15 +649,15 @@ class _GitlabPlatform(_RemoteGitPlatform):
         return None
 
     def _request_review(self, refs: _References, reviewers: List[str], message: Optional[str]) \
-            -> None:
+            -> Optional[str]:
         users = self._get_reviewers(reviewers)
         if not message:
             if not users:
-                return
+                return None
             if merge_request := self._get_merge_request(refs.remote, refs.base):
                 merge_request.assignee_ids.extend(users)
                 merge_request.save()
-            return
+            return None
         title, description = message.split('\n', 1)
         mr_parameters: _GitlabMRRequest = {
             'assignee_ids': users,
@@ -638,7 +666,7 @@ class _GitlabPlatform(_RemoteGitPlatform):
             'target_branch': refs.base,
             'title': title,
         }
-        self.project.merge_request.create(mr_parameters)
+        return str(self.project.merge_request.create(mr_parameters).get_id())
 
     def get_available_reviewers(self) -> Set[str]:
         return {member.username for member in self.project.members.list()}
@@ -701,12 +729,12 @@ class _GithubPlatform(_RemoteGitPlatform):
         ], input=json.dumps({'assignees': list(assignees)}))
 
     def _request_review(self, refs: _References, reviewers: List[str], message: Optional[str]) \
-            -> None:
+            -> Optional[str]:
         """Ask for review on Github."""
 
         if not message:
             self._add_reviewers(refs, reviewers)
-            return
+            return None
         hub_command = [
             'pull-request',
             '-m', message,
@@ -719,6 +747,7 @@ class _GithubPlatform(_RemoteGitPlatform):
             hub_command.extend(['-a', ','.join(assignees), '-r', ','.join(requested_reviewers)])
         output = _run_hub(hub_command)
         logging.info(output.replace('github.com', 'reviewable.io/reviews').replace('pull/', ''))
+        return output.rsplit('/', 1)[-1]
 
     def get_available_reviewers(self) -> Set[str]:
         assignees = json.loads(_run_hub(
@@ -744,6 +773,9 @@ class _GithubPlatform(_RemoteGitPlatform):
             pr.head
             for pr in _GithubPullRequest.fetch_all()
             if self.username in pr.reviewers]
+
+    def _react_with_auto_assign(self, pr_id: str) -> None:
+        _graphql(_MUTATION_REACT_COMMENT, pullRequestId=pr_id, reaction=_AUTO_ASSIGN_REACTION)
 
 
 class _LocalPlatform(_RemoteGitPlatform):
@@ -830,7 +862,7 @@ def prepare_push_and_request_review(
         reviewer = _get_auto_reviewer()
         logging.info('Sending the review to "%s".', reviewer)
         reviewers.append(reviewer)
-    _get_platform().request_review(refs, reviewers)
+    _get_platform().request_review(refs, reviewers, is_auto_assigned=is_auto)
     if not is_submit:
         return
     local_sha = _run_git(['rev-parse', refs.branch])
