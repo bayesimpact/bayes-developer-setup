@@ -62,7 +62,7 @@ function check_bazel_files() {
 }
 
 function check_bazel_tree() {
-  if [ -n "$GIT_COMMIT_IGNORE_BAZEL" ] || ! command -v bazel > /dev/null || test ! -f '.circleci/BUILD'; then
+  if [ -n "$GIT_COMMIT_IGNORE_BAZEL" ] || [ ! -f "WORKSPACE" ] || ! command -v bazel > /dev/null || test ! -f '.circleci/BUILD'; then
     return
   fi
   if ! bazel query 'deps(//.circleci/...)' > /dev/null; then
