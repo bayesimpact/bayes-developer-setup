@@ -73,8 +73,8 @@ _MUTATION_ENABLE_AUTO_MERGE = '''mutation AutoMerge($pullRequestId: ID!) {
     pullRequest {autoMergeRequest {enabledAt}}
   }
 }'''
-_MUTATION_REACT_TO_AUTO_MERGE = f'''mutation ReactComment($pullRequestId: ID!) {{
-  addComment(input: {{body: "{_AUTO_MERGE_REACTION}", subjectId: $pullRequestId}}) {{
+_MUTATION_REACT_COMMENT = f'''mutation ReactComment($pullRequestId: ID!, $reaction: String!) {{
+  addComment(input: {{body: $reaction, subjectId: $pullRequestId}}) {{
     commentEdge {{
       node {{
         id
@@ -291,7 +291,8 @@ def enable_auto_merge(pr_node_id: str) -> bool:
     if not mutation_answer['data']['enablePullRequestAutoMerge']['pullRequest']['autoMergeRequest'][
             'enabledAt']:
         return False
-    mutation_answer = _graphql(_MUTATION_REACT_TO_AUTO_MERGE, pullRequestId=pr_node_id)
+    mutation_answer = _graphql(
+        _MUTATION_REACT_COMMENT, pullRequestId=pr_node_id, reaction=_AUTO_MERGE_REACTION)
     return bool(mutation_answer['data']['addComment']['commentEdge']['node']['id'])
 
 
