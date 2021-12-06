@@ -389,8 +389,9 @@ def _should_auto_merge(branch: str, should_force: bool, pr_infos: Optional[_PrIn
     logging.info('CI status is "%s"', ci_status)
     should_auto_merge = _GIT_SUBMIT_AUTO_MERGE
     if pr_infos.auto_merge.is_enabled:
-        should_auto_merge = False
-    elif not pr_infos.auto_merge.can_enable:
+        logging.info('Auto-merge is already enabled for this PR.')
+        return False
+    if not pr_infos.auto_merge.can_enable:
         should_auto_merge = False
     if should_auto_merge is None:
         should_auto_merge = _ask_yes_no('Do you want to enable auto-merge?')
