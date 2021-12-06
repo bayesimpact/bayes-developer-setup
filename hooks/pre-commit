@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Check the staged changes before committing them.
 
@@ -70,11 +70,30 @@ function check_bazel_tree() {
   fi
 }
 
+function check_npm_funding() {
+  if [ -n "$GIT_COMMIT_IGNORE_NPM_FUNDING" ] || ! command -v jq > /dev/null || [[ $(git config remote.origin.url) != *bayesimpact* ]]; then
+    return
+  fi
+  shopt -s globstar
+  local should_give_info
+  for package in **/package.json; do
+    if ! jq -e '.funding' $package > /dev/null; then
+      echo "Please add our funding information to $package"
+      should_give_info=1
+    fi
+    if [ -n "$should_give_info" ]; then
+      echo "Add the following line to each file:"
+      echo '  "funding": "https://www.helloasso.com/associations/bayes-impact-france/formulaires/5",'
+    fi
+  done
+}
+
 readonly MESSAGE_FILE="$(mktemp)"
 check_circle_config >> "$MESSAGE_FILE"
 if check_bazel_files >> "$MESSAGE_FILE"; then
   check_bazel_tree >> "$MESSAGE_FILE"
 fi
+check_npm_funding >> "$MESSAGE_FILE"
 
 readonly MSG="$(cat $MESSAGE_FILE)"
 rm "$MESSAGE_FILE"
