@@ -2,7 +2,7 @@
 #
 # bash completion support for git-review
 
-if [ -n "$GIT_REVIEW_EXPERIMENTAL_PYTHON" ]; then
+if [ -z "$NO_GIT_REVIEW_PYTHON" ]; then
   readonly PYTHON_SCRIPT="$HOME/.bayes-developer-setup/bin/git-review.py"
   eval "$(register-python-argcomplete --external-argcomplete-script "$PYTHON_SCRIPT" git-review |
     # Rename the auto-completion function to be caught by git completion.

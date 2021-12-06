@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [ -n "$GIT_REVIEW_EXPERIMENTAL_PYTHON" ]; then
+if [ -z "$NO_GIT_REVIEW_PYTHON" ]; then
   if shopt -po xtrace > /dev/null ; then
     readonly XTRACE='--xtrace ++'
   fi
