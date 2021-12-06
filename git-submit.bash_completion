@@ -22,7 +22,7 @@ __git_submit_options() {
         shift # past argument
         shift # past value
         ;;
-        -a|--abort)
+        -a|--abort|-r|--rebase)
         _GIT_SUBMIT_ABORT="$1"
         shift # past argument
         ;;
