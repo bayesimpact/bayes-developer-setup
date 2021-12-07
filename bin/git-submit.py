@@ -458,8 +458,9 @@ def _rebase(
     except subprocess.CalledProcessError:
         if should_abort_on_conflict:
             _run('git', 'rebase', '--abort')
-            raise
-    logging.warning('Please resolve conflicts and run `git rebase --continue`.')
+        else:
+            logging.warning('Please resolve conflicts and run `git rebase --continue`.')
+        raise
 
 
 def _handle_rebase(default: _Branch, branch: _Branch, force: bool = False) -> None:
