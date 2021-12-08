@@ -147,7 +147,9 @@ def _ask_yes_no(question: str) -> bool:
 class _Arguments(typing.Protocol):
     abort: bool
     branch: str
+    default: '_Branch'
     force: bool
+    prefix: Optional[str]
     rebase: bool
     user: str
     xtrace: Optional[str]
@@ -239,6 +241,7 @@ def _get_remote_head(base_remote: str) -> str:
     return head
 
 
+@functools.cache
 def _get_default_branch() -> _Branch:
     base_remote: str = _get_base_remote()
     remote_head: str = _get_remote_head(base_remote)
@@ -260,18 +263,33 @@ def _get_default_branch() -> _Branch:
     return _Branch(local=local, remote=base_remote, merge=remote_head, initial=initial)
 
 
+def _get_local_branches(default_branch: str) -> list[str]:
+    """List branches in user-preferred order.
+
+    The default branch is excluded.
+    """
+
+    all_branches = _run('git', 'branch', '--format=%(refname:short)').split('\n')
+    all_branches.remove(default_branch)
+    return all_branches
+
+
+def _get_remote_prefixed_branches(remote_prefix: str) -> list[str]:
+    return [
+        branch.removeprefix(remote_prefix)
+        for branch in _run(
+            'git', 'branch', '-r', '--format=%(refname:short)',
+            '--list', f'{remote_prefix}*',
+        ).split('\n')]
+
+
 def _show_available_branches(default_branch: str, remote_prefix: Optional[str] = None) -> None:
-    # List branches in user-preferred order, without the asterisk on current branch.
-    local_branches = _run('git', 'branch', '--format=%(refname:short)').split('\n')
-    local_branches.remove(default_branch)
+    local_branches = _get_local_branches(default_branch)
     logging.info('local branches:\n%s', '\n'.join(local_branches))
     if not remote_prefix:
         return
-    dangling_branches = [
-        branch.removeprefix(remote_prefix)
-        for branch in _run('git', 'branch', '-a', '--format=%(refname:short)').split('\n')
-        if branch.startswith(remote_prefix)]
-    logging.info('remote dangling branches:\n%s', dangling_branches)
+    logging.info(
+        'remote dangling branches:\n%s', '\n'.join(_get_remote_prefixed_branches(remote_prefix)))
 
 
 def _get_branch(branch: str, default: _Branch, prefix: Optional[str]) -> _Branch:
@@ -537,11 +555,42 @@ def _merge_now_or_later(pr_infos: _PrInfos, should_auto_merge: bool, sha1: str) 
     return False
 
 
+def _prepare_args(args: _Arguments) -> _Arguments:
+    args.abort = args.abort or args.rebase
+    if args.abort and not args.user:
+        args.user = _run('git', 'config', 'user.email').split('@', 1)[0]
+    if not args.branch:
+        args.branch = _START_BRANCH
+    args.default = _get_default_branch()
+    args.prefix = f'{args.default.remote}/{args.user}-' if args.abort else None
+    return args
+
+
+def _branch_completer(*, parsed_args: _Arguments, **unused_kwargs: Any) -> list[str]:
+    args = _prepare_args(parsed_args)
+    local_branches = _get_local_branches(args.default.local)
+    if not args.prefix:
+        return local_branches
+    return local_branches + _get_remote_prefixed_branches(args.prefix)
+
+
+def _user_completer(*, prefix: str, parsed_args: _Arguments, **unused_kwargs: Any) -> set[str]:
+    args = _prepare_args(parsed_args)
+    remote_prefix = f'{args.default.remote}/'
+    return {
+        name.removeprefix(remote_prefix).split('-', 1)[0]
+        for name in _run(
+            'git', 'branch', '-r', '--format=%(refname:short)',
+            '--list', f'{remote_prefix}{prefix}*').split('\n')
+        if '-' in name}
+
+
 def main() -> None:
     """Parse arguments, and do whatever needs to be done."""
 
     parser = argparse.ArgumentParser('Submit the given or current branch.')
-    parser.add_argument('branch', default='', help='''The branch to submit.''', nargs='?')
+    branch_action = parser.add_argument(
+        'branch', default='', help='''The branch to submit.''', nargs='?')
     parser.add_argument('--xtrace', '-x', help='''Debug.''')
     parser.add_argument('--force', '-f', action='store_true', help='''
         Forces the submit, regardless of the CI status.''')
@@ -550,30 +599,25 @@ def main() -> None:
         Also recreate a branch from origin, without its username prefix.''')
     parser.add_argument('--rebase', '-r', action='store_true', help='''
         Rebase the given branch on top of origin/HEAD and try to submit it.''')
-    parser.add_argument('--user', '-u', default='', help='''
+    user_action = parser.add_argument('--user', '-u', default='', help='''
         Set the prefix for the remote branch to USER. Default is username from the git user's email
-        (such as in username@example.com). Only useful for '--abort'.''')
+        (such as in username@example.com). Only useful for '--abort'/'--rebase'.''')
     if argcomplete:
+        setattr(branch_action, 'completer', _branch_completer)
+        setattr(user_action, 'completer', _user_completer)
         argcomplete.autocomplete(parser)
-    args: _Arguments = parser.parse_args()
-    should_abort_auto_submit = args.abort or args.rebase
-    if should_abort_auto_submit and not args.user:
-        args.user = _run('git', 'config', 'user.email').split('@', 1)[0]
-    if not args.branch:
-        args.branch = _START_BRANCH
+    args = _prepare_args(parser.parse_args())
     if args.xtrace:
         del _XTRACE_PREFIX[:]
         _XTRACE_PREFIX.append(args.xtrace)
-    default = _get_default_branch()
-    remote_prefix = f'{default.remote}/{args.user}-' if should_abort_auto_submit else None
-    branch = _get_branch(args.branch, default, remote_prefix)
+    branch = _get_branch(args.branch, args.default, args.prefix)
     pr_infos = get_pr_info(branch.merge)
-    if should_abort_auto_submit:
+    if args.abort:
         abort_submit(args.branch, pr_infos)
-        if args.abort:
+        if not args.rebase:
             return
     _run('git', 'fetch')
-    default = default.with_initial(default.tracked)
+    default = args.default.with_initial(args.default.tracked)
     _handle_rebase(default, branch, force=args.rebase)
     logging.info('Branch "%s" has been rebased onto "%s"', branch, default.initial)
     pr_infos = get_pr_info(branch.merge)
