@@ -1,4 +1,5 @@
 #!/usr/bin/env python3.9
+# PYTHON_ARGCOMPLETE_OK
 """Submit a PR after the relevant checks have been done."""
 
 import argparse
@@ -12,6 +13,12 @@ import subprocess
 import sys
 import typing
 from typing import Any, NoReturn, Optional, Sequence, Union
+
+try:
+    import argcomplete
+except ImportError:
+    # This is not needed for the script to work.
+    argcomplete = None
 
 # Whether we should print each command before running it (bash xtrace), and the prefix to use.
 _XTRACE_PREFIX: list[str] = []
@@ -546,6 +553,8 @@ def main() -> None:
     parser.add_argument('--user', '-u', default='', help='''
         Set the prefix for the remote branch to USER. Default is username from the git user's email
         (such as in username@example.com). Only useful for '--abort'.''')
+    if argcomplete:
+        argcomplete.autocomplete(parser)
     args: _Arguments = parser.parse_args()
     should_abort_auto_submit = args.abort or args.rebase
     if should_abort_auto_submit and not args.user:
