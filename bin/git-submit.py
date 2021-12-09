@@ -22,7 +22,12 @@ except ImportError:
 
 # Whether we should print each command before running it (bash xtrace), and the prefix to use.
 _XTRACE_PREFIX: list[str] = []
+# Whether we should run all hub commands without cache.
+_CACHE_BUSTER: list[str] = []
 _IFS_REGEX = re.compile(r'[ \n]')
+_ONE_DAY = 86400
+_TEN_MINUTES = 600
+_ONE_MINUTE = 60
 
 
 def _xtrace(command: Sequence[str], *, prefix_cache: list[str] = _XTRACE_PREFIX) -> None:
@@ -48,10 +53,18 @@ def _run(*args: str, silently: bool = False) -> str:
         raise
 
 
+def _run_hub(*args: str, cache: Optional[int] = None, silently: bool = False) -> str:
+    final_command = ('hub',) + args
+    if cache and not _CACHE_BUSTER:
+        final_command += ('--cache', str(cache))
+    _xtrace(final_command)
+    return _run(*final_command, silently=silently)
+
+
 @functools.cache
 def _can_use_hub() -> bool:
     try:
-        return bool(shutil.which('hub') and _run('hub', 'browse', '-u'))
+        return bool(shutil.which('hub') and _run_hub('browse', '-u'))
     except subprocess.CalledProcessError:
         return False
 
@@ -129,10 +142,10 @@ _QUERY_GET_PR_INFOS = '''query IsAutoMergeable($headRefName: String!) {
 }'''
 
 
-def _graphql(query: str, **kwargs: str) -> dict[str, Any]:
+def _graphql(query: str, cache: Optional[int] = None, **kwargs: str) -> dict[str, Any]:
     kwargs['query'] = query
     args = [arg for key, value in kwargs.items() for arg in ('-F', f'{key}={value}')]
-    return typing.cast(dict[str, Any], json.loads(_run('hub', 'api', 'graphql', *args)))
+    return typing.cast(dict[str, Any], json.loads(_run_hub('api', 'graphql', *args, cache=cache)))
 
 
 # TODO(cyrille): Add timeout/1char possibilities.
@@ -147,6 +160,7 @@ def _ask_yes_no(question: str) -> bool:
 class _Arguments(typing.Protocol):
     abort: bool
     branch: str
+    cache: bool
     default: '_Branch'
     force: bool
     prefix: Optional[str]
@@ -232,7 +246,8 @@ def _get_remote_head(base_remote: str) -> str:
     except subprocess.CalledProcessError:
         pass
     if _can_use_hub():
-        head: str = json.loads(_run('hub', 'api', 'repos/{owner}/{repo}'))['default_branch']
+        head: str = json.loads(
+            _run_hub('api', 'repos/{owner}/{repo}', cache=_ONE_DAY))['default_branch']
     else:
         head = 'main'
     logging.error(
@@ -328,7 +343,7 @@ def disable_auto_merge(pr_node_id: str) -> bool:
     if not mutation_answer['data']['disablePullRequestAutoMerge']['pullRequest'][
             'viewerCanEnableAutoMerge']:
         return False
-    all_comments = _graphql(_QUERY_GET_PR_COMMENTS, pullRequestId=pr_node_id)
+    all_comments = _graphql(_QUERY_GET_PR_COMMENTS, pullRequestId=pr_node_id, cache=_ONE_MINUTE)
     for comment in all_comments['data']['node']['comments']['nodes']:
         if comment['body'] != _AUTO_MERGE_REACTION:
             continue
@@ -361,19 +376,18 @@ def get_pr_info(branch: str, should_auto_merge: bool = bool(_GIT_SUBMIT_AUTO_MER
         return pr_infos
     logging.warning("The remote branch won't be deleted after auto-merge.")
     if _ask_yes_no('Do you want to update your repository settings?'):
-        _run(
-            'hub', 'api', 'repos/{owner}/{repo}', '-X', 'PATCH',
-            '-f', 'delete_branch_on_merge=true')
+        _run_hub(
+            'api', 'repos/{owner}/{repo}', '-X', 'PATCH', '-f', 'delete_branch_on_merge=true')
     else:
         logging.info(
             'You can still do it from this page:\n\t%s',
-            _run('hub', 'browse', '-u', '--', 'settings#merge_types_delete_branch'))
+            _run_hub('browse', '-u', '--', 'settings#merge_types_delete_branch'))
     if should_auto_merge and not can_auto_merge:
         logging.warning('The repository is not set to enable auto-merge.')
         if repo_infos['viewerCanAdminister']:
             logging.info(
                 'You can do it from this page:\n\t%s',
-                _run('hub', 'browse', '-u', '--', 'settings#merge_types_auto_merge'))
+                _run_hub('browse', '-u', '--', 'settings#merge_types_auto_merge'))
         else:
             logging.info('You can contact a repo admin to set it up for you.')
     return pr_infos
@@ -404,7 +418,7 @@ def _should_auto_merge(branch: str, should_force: bool, pr_infos: Optional[_PrIn
     if not pr_infos:
         return False
     try:
-        _run('hub', 'ci-status', branch, silently=True)
+        _run_hub('ci-status', branch, silently=True)
         return False
     except subprocess.CalledProcessError as error:
         ci_status = error.output.strip()
@@ -425,7 +439,7 @@ def _should_auto_merge(branch: str, should_force: bool, pr_infos: Optional[_PrIn
             _AUTO_MERGE_ENV_NAME)
     if not should_auto_merge:
         logging.info('Use "-f" if you want to force submission.')
-        _run('hub', 'ci-status', '-v', branch)
+        _run_hub('ci-status', '-v', branch)
     return should_auto_merge
 
 
@@ -546,8 +560,8 @@ def _merge_now_or_later(pr_infos: _PrInfos, should_auto_merge: bool, sha1: str) 
         return False
     if not should_auto_merge:
         logging.info('Merging on GitHub.')
-        _run(
-            'hub', 'api', '-X', 'PUT', f'/repos/{{owner}}/{{repo}}/pulls/{pr_infos.number}/merge',
+        _run_hub(
+            'api', '-X', 'PUT', f'/repos/{{owner}}/{{repo}}/pulls/{pr_infos.number}/merge',
             '-F', 'merge_method=squash', '-F', f'sha={sha1}')
         return True
     enable_auto_merge(pr_infos.node_id)
@@ -561,6 +575,9 @@ def _prepare_args(args: _Arguments) -> _Arguments:
         args.user = _run('git', 'config', 'user.email').split('@', 1)[0]
     if not args.branch:
         args.branch = _START_BRANCH
+    if not args.cache:
+        del _CACHE_BUSTER[:]
+        _CACHE_BUSTER.append('busted')
     args.default = _get_default_branch()
     args.prefix = f'{args.default.remote}/{args.user}-' if args.abort else None
     return args
@@ -602,6 +619,8 @@ def main() -> None:
     user_action = parser.add_argument('--user', '-u', default='', help='''
         Set the prefix for the remote branch to USER. Default is username from the git user's email
         (such as in username@example.com). Only useful for '--abort'/'--rebase'.''')
+    parser.add_argument('--no-cache', dest='cache', action='store_false', help='''
+        Clear the cache mechanism on hub API calls.''')
     if argcomplete:
         setattr(branch_action, 'completer', _branch_completer)
         setattr(user_action, 'completer', _user_completer)

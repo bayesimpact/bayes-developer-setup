@@ -217,10 +217,10 @@ def _run_hub(command: list[str], *, cache: Optional[int] = None, stdin: Optional
     return subprocess.check_output(final_command, text=True, input=stdin).strip()
 
 
-def _graphql(query: str, **kwargs: str) -> dict[str, Any]:
+def _graphql(query: str, *, cache: Optional[int] = None, **kwargs: str) -> dict[str, Any]:
     kwargs['query'] = query
     args = [arg for key, value in kwargs.items() for arg in ('-F', f'{key}={value}')]
-    return typing.cast(dict[str, Any], json.loads(_run_hub(['api', 'graphql', *args])))
+    return typing.cast(dict[str, Any], json.loads(_run_hub(['api', 'graphql', *args], cache=cache)))
 
 
 _GithubAPIReference = TypedDict('_GithubAPIReference', {'ref': str})
@@ -817,6 +817,7 @@ class _GithubPlatform(_RemoteGitPlatform):
         pr_node_id = _graphql(
             _QUERY_GET_PR_INFOS,
             pullRequestUrl=f'https://github.com/{self.project_name}/pull/{pr_id}',
+            cache=_ONE_DAY,
         )['data']['resource']['id']
         _graphql(_MUTATION_REACT_COMMENT, pullRequestId=pr_node_id, reaction=_AUTO_ASSIGN_REACTION)
 
