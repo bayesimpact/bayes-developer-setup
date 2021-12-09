@@ -22,29 +22,44 @@ import re
 import subprocess
 import sys
 import typing
-from typing import Any, Callable, Dict, List, NoReturn, Optional, Sequence, Set, TypedDict, Union
+from typing import Any, Callable, Mapping, NoReturn, Optional, Sequence, Set, TypedDict, Union
 import unicodedata
 
 try:
     import requests
     from requests import exceptions
 
-    class LuccaSession(requests.Session):
+    class _GetSet:
+        @typing.overload
+        def get(self, key: str, default: str = ...) -> str:
+            ...
+
+        @typing.overload
+        def get(self, key: str, default: None = None) -> Optional[str]:
+            ...
+
+        def get(self, key: str, default: Optional[str] = None) -> Optional[str]:
+            ...
+
+        def set(self, key: str, value: str) -> None:
+            ...
+
+    class _LuccaSession(requests.Session):
         """A connected session to the Lucca API."""
 
         def __init__(
                 self, base_url: str, token: Optional[str], *,
-                on_refresh: Callable[['LuccaSession'], None]) -> None:
+                on_refresh: Callable[['_LuccaSession'], None]) -> None:
             super().__init__()
             self._base_url = base_url
+            self.typed_cookies = typing.cast(_GetSet, self.cookies)
             if token:
-                self.cookies.set('authToken', token)
+                self.typed_cookies.set('authToken', token)
             self._on_refresh = on_refresh
 
-        def get(
-                self, url: str, *,
-                params: Optional[dict[str, Union[str, int]]] = None) -> requests.Response:
+        def get(self, url: str, **kwargs: Any) -> requests.Response:
             url = f'{self._base_url}/{url}'
+            params: Optional[dict[str, Union[str, int]]] = kwargs.get('params')
             try:
                 response = super().get(url, params=params)
                 response.raise_for_status()
@@ -85,8 +100,10 @@ try:
                 if off_day['am' if is_am else 'pm']['isOff']
                 if (off_email := off_day['owner'].get('mail'))}
             return absents | off_days
+
+    LuccaSession: Optional[type['_LuccaSession']] = _LuccaSession
 except ImportError:
-    requests = None
+    requests = None  # type: ignore
     LuccaSession = None  # pylint: disable=invalid-name
 try:
     import argcomplete
@@ -142,7 +159,7 @@ _QUERY_GET_PR_INFOS = '''query NodeFromUrl($pullRequestUrl: URI!) {
 
 # Whether we should print each command before running it (bash xtrace), and the prefix to use.
 _XTRACE_PREFIX: list[str] = []
-_CACHE_BUSTER: List[str] = []
+_CACHE_BUSTER: list[str] = []
 
 
 class _GitlabMRRequest(TypedDict, total=False):
@@ -150,7 +167,7 @@ class _GitlabMRRequest(TypedDict, total=False):
     source_branch: str
     target_branch: str
     title: str
-    assignee_ids: List[int]
+    assignee_ids: list[int]
 
 
 class _ScriptError(ValueError):
@@ -174,25 +191,28 @@ def _xtrace(command: Sequence[str]) -> None:
         ) + '\n')
 
 
-def _run_git(command: List[str], **kwargs: Any) -> str:
+def _run_git(command: list[str], *, env: Optional[dict[str, str]] = None) -> str:
     full_command = ['git'] + command
     _xtrace(full_command)
-    return subprocess.check_output(full_command, text=True, **kwargs).strip()
+    return subprocess.check_output(full_command, text=True, env=env).strip()
 
 
 def _has_git_diff(base: str) -> bool:
-    full_command = ['git', 'diff', '--quiet', base]
-    _xtrace(full_command)
-    return bool(subprocess.run(full_command).returncode)
+    try:
+        _run_git(['diff', '--quiet', base])
+        return False
+    except subprocess.CalledProcessError:
+        return True
 
 
 # TODO(cyrille): Use tuples rather than lists.
-def _run_hub(command: List[str], *, cache: Optional[int] = None, **kwargs: Any) -> str:
+def _run_hub(command: list[str], *, cache: Optional[int] = None, stdin: Optional[str] = None) \
+        -> str:
     final_command = ['hub'] + command
     if cache and not _CACHE_BUSTER:
         final_command.extend(['--cache', str(cache)])
     _xtrace(final_command)
-    return subprocess.check_output(final_command, text=True, **kwargs).strip()
+    return subprocess.check_output(final_command, text=True, input=stdin).strip()
 
 
 def _graphql(query: str, **kwargs: str) -> dict[str, Any]:
@@ -209,7 +229,7 @@ class _GithubAPIPullRequest(TypedDict, total=False):
     base: _GithubAPIReference
     head: _GithubAPIReference
     number: int
-    requested_reviewers: List[_GithubAPIUser]
+    requested_reviewers: list[_GithubAPIUser]
 
 
 class _GithubPullRequest(typing.NamedTuple):
@@ -220,10 +240,10 @@ class _GithubPullRequest(typing.NamedTuple):
 
     @staticmethod
     @functools.lru_cache(maxsize=None)
-    def fetch_all() -> List['_GithubPullRequest']:
+    def fetch_all() -> list['_GithubPullRequest']:
         """Get all pull requests for the current repository."""
 
-        all_prs = typing.cast(List[_GithubAPIPullRequest], json.loads(
+        all_prs = typing.cast(list[_GithubAPIPullRequest], json.loads(
             _run_hub(['api', r'/repos/{owner}/{repo}/pulls'], cache=_ONE_MINUTE)))
         return [
             _GithubPullRequest(
@@ -235,26 +255,32 @@ class _GithubPullRequest(typing.NamedTuple):
 class LoginHTMLParser(html_parser.HTMLParser):
     """Parse the login HTML page, and fill its form with login info to get an auth token."""
 
-    def __init__(self, login_url: str, session: 'requests.Session') -> None:
+    def __init__(self, login_url: str, session: '_LuccaSession') -> None:
         super().__init__()
         self._login_url = login_url
         self._in_form = False
-        self._form: Dict[str, str] = {}
+        self._form: dict[str, str] = {}
         self._session = session
         self.feed(self._session.get(login_url).text)
 
-    def handle_starttag(self, tag, attrs) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
         if tag == 'form':
             self._in_form = True
             return
         if tag == 'input' and self._in_form:
             attr_dict = dict(attrs)
             if 'name' in attr_dict and 'value' in attr_dict:
-                self._form[attr_dict['name']] = attr_dict['value']
+                name = attr_dict['name']
+                value = attr_dict['value']
+                if name and value:
+                    self._form[name] = value
 
-    def handle_endtag(self, tag) -> None:
+    def handle_endtag(self, tag: str) -> None:
         if tag == 'form':
             self._in_form = False
+
+    def error(self, message: str) -> NoReturn:
+        raise ValueError(message)
 
     def get_token(self, username: str, password: str) -> str:
         """Get token from login information."""
@@ -265,7 +291,7 @@ class LoginHTMLParser(html_parser.HTMLParser):
             'https://bayesimpact.ilucca.net/identity/login',
             data=dict(self._form, UserName=username, Password=password, IsPersistent=True))
         response.raise_for_status()
-        return self._session.cookies.get('authToken')
+        return self._session.typed_cookies.get('authToken', '')
 
 
 class _GitConfig:
@@ -296,13 +322,13 @@ class _GitConfig:
         self.set_config('review.engineers', value)
 
     @property
-    def recent_reviewers(self) -> List[str]:
+    def recent_reviewers(self) -> list[str]:
         """List of reviewers, starting with the most recently used ones."""
 
         return self.get_config('review.recent', is_global=True).split(',')
 
     @recent_reviewers.setter
-    def recent_reviewers(self, reviewers: List[str]) -> None:
+    def recent_reviewers(self, reviewers: list[str]) -> None:
         """Update the list of most recent reviewers."""
 
         self.set_config('review.recent', ','.join(r for r in reviewers if r), is_global=True)
@@ -322,7 +348,7 @@ class _GitConfig:
         self.set_config('review.lucca.url', url, is_global=True)
 
     @property
-    def lucca_session(self) -> Optional['LuccaSession']:
+    def lucca_session(self) -> Optional['_LuccaSession']:
         """Value for a valid token for Lucca API."""
 
         if _GIT_CONFIG.get_config('review.lucca.enabled') != 'true':
@@ -342,10 +368,10 @@ class _GitConfig:
         return session
 
     @lucca_session.setter
-    def lucca_session(self, value: 'LuccaSession') -> None:
+    def lucca_session(self, value: '_LuccaSession') -> None:
         """Update the saved Lucca token."""
 
-        self.set_config('review.lucca.token', value.cookies.get('authToken'), is_global=True)
+        self.set_config('review.lucca.token', value.typed_cookies.get('authToken'), is_global=True)
 
 
 _GIT_CONFIG = _GitConfig()
@@ -487,7 +513,7 @@ def _push(refs: _References, is_forced: bool) -> None:
     _run_git(command)
 
 
-def _make_pr_message(refs: _References, reviewers: List[str]) -> str:
+def _make_pr_message(refs: _References, reviewers: list[str]) -> str:
     """Create a message for the review request."""
 
     message = _run_git(['log', '--format=%B', f'{_REMOTE_REPO}/{refs.base}..{refs.branch}'])
@@ -496,7 +522,7 @@ def _make_pr_message(refs: _References, reviewers: List[str]) -> str:
     return message
 
 
-def _run_git_review_hook(refs: _References, reviewers: List[str]) -> str:
+def _run_git_review_hook(refs: _References, reviewers: list[str]) -> str:
     """Run the git-review hook if it exists."""
 
     hook_script = f'{_run_git(["rev-parse", "--show-toplevel"])}/.git-review-hook'
@@ -549,7 +575,7 @@ class _RemoteGitPlatform:
         return set()
 
     def request_review(
-            self, refs: _References, reviewers: List[str], is_auto_assigned: bool = False) -> None:
+            self, refs: _References, reviewers: list[str], is_auto_assigned: bool = False) -> None:
         """Ask for a review on the specific platform."""
 
         review_id = self._has_existing_review(refs)
@@ -591,7 +617,7 @@ class _RemoteGitPlatform:
         raise NotImplementedError(
             f'`{command}`{context} is not implemented for {self._platform} yet.')
 
-    def _request_review(self, refs: _References, reviewers: List[str], message: Optional[str]) \
+    def _request_review(self, refs: _References, reviewers: list[str], message: Optional[str]) \
             -> Optional[str]:
         self._not_implemented('git review')
 
@@ -611,7 +637,7 @@ class _RemoteGitPlatform:
             raise _ScriptError('No opened review for branch "%s".', branch)
         return f'https://reviewable.io/reviews/{self.project_name}/{number}'
 
-    def get_available_reviews(self) -> List[str]:
+    def get_available_reviews(self) -> list[str]:
         """List branches the user should review."""
 
         self._not_implemented('git review --browse', ' autocomplete')
@@ -640,7 +666,7 @@ class _GitlabPlatform(_RemoteGitPlatform):
         logging.warning('No engineers team set-up for Gitlab. Not assigning anyone.')
         return set()
 
-    def _get_reviewers(self, reviewers: List[str]) -> List[int]:
+    def _get_reviewers(self, reviewers: list[str]) -> list[int]:
         return [user.id for r in reviewers for user in self.client.users.list(username=r)]
 
     def _get_merge_request(self, branch: str, base: Optional[str]) \
@@ -652,10 +678,10 @@ class _GitlabPlatform(_RemoteGitPlatform):
 
     def _get_review_number(self, branch: str, base: Optional[str] = None) -> Optional[str]:
         if merge_request := self._get_merge_request(branch, base):
-            return merge_request.number
+            return str(merge_request.number)
         return None
 
-    def _request_review(self, refs: _References, reviewers: List[str], message: Optional[str]) \
+    def _request_review(self, refs: _References, reviewers: list[str], message: Optional[str]) \
             -> Optional[str]:
         users = self._get_reviewers(reviewers)
         if not message:
@@ -713,9 +739,9 @@ class _GithubPlatform(_RemoteGitPlatform):
         _run_hub([
             'api', r'/repos/{owner}/{repo}/issues/'
             f'{issue_number}/labels', '--input', '-',
-        ], input=json.dumps({'labels': [label]}))
+        ], stdin=json.dumps({'labels': [label]}))
 
-    def _add_reviewers(self, refs: _References, reviewers: List[str]) -> None:
+    def _add_reviewers(self, refs: _References, reviewers: list[str]) -> None:
         """Add reviewers to the current Pull Request."""
 
         if not reviewers:
@@ -728,14 +754,14 @@ class _GithubPlatform(_RemoteGitPlatform):
             'api', r'/repos/{owner}/{repo}/pulls/'
             f'{pull_number}/requested_reviewers',
             '--input', '-',
-        ], input=json.dumps({'reviewers': list(requested_reviewers)}))
+        ], stdin=json.dumps({'reviewers': list(requested_reviewers)}))
         _run_hub([
             'api', r'/repos/{owner}/{repo}/issues/'
             f'{pull_number}/assignees',
             '--input', '-',
-        ], input=json.dumps({'assignees': list(assignees)}))
+        ], stdin=json.dumps({'assignees': list(assignees)}))
 
-    def _request_review(self, refs: _References, reviewers: List[str], message: Optional[str]) \
+    def _request_review(self, refs: _References, reviewers: list[str], message: Optional[str]) \
             -> Optional[str]:
         """Ask for review on Github."""
 
@@ -775,7 +801,7 @@ class _GithubPlatform(_RemoteGitPlatform):
             user_line = next(line for line in hub_config.readlines() if 'user' in line)
         return user_line.split(':')[1].strip()
 
-    def get_available_reviews(self) -> List[str]:
+    def get_available_reviews(self) -> list[str]:
         return [
             pr.head
             for pr in _GithubPullRequest.fetch_all()
@@ -793,7 +819,7 @@ class _LocalPlatform(_RemoteGitPlatform):
 
     _platform = 'local remote'
 
-    def _request_review(self, refs: _References, reviewers: List[str], message: Optional[str]) \
+    def _request_review(self, refs: _References, reviewers: list[str], message: Optional[str]) \
             -> None:
         ...
 
@@ -858,7 +884,7 @@ def _get_auto_reviewer() -> Optional[str]:
 
 
 def prepare_push_and_request_review(
-        *, username: str, base: Optional[str], reviewers: List[str],
+        *, username: str, base: Optional[str], reviewers: list[str],
         is_submit: bool, is_auto: bool, is_new: bool) -> None:
     """Prepare a local Change List for review."""
 
@@ -871,8 +897,9 @@ def prepare_push_and_request_review(
         _push(refs, not is_new and _get_existing_remote() == refs.remote)
     if is_auto:
         reviewer = _get_auto_reviewer()
-        logging.info('Sending the review to "%s".', reviewer)
-        reviewers.append(reviewer)
+        if reviewer:
+            logging.info('Sending the review to "%s".', reviewer)
+            reviewers.append(reviewer)
     _get_platform().request_review(refs, reviewers, is_auto_assigned=is_auto)
     if not is_submit:
         return
@@ -896,6 +923,8 @@ _OPEN_URL_COMMAND = {
     'Darwin': 'open',
     'Windows': 'start',
 }
+
+
 def _browse_to(branch: str) -> None:
     real_branch = _get_existing_remote() or _get_head() if branch == _BROWSE_CURRENT else branch
     url = _get_platform().get_review_url_for(real_branch or branch)
@@ -908,22 +937,21 @@ def _browse_to(branch: str) -> None:
         raise
 
 
-def main(string_args: Optional[List[str]] = None) -> None:
+def main(string_args: Optional[list[str]] = None) -> None:
     """Parse CLI arguments and run the script."""
 
     # TODO(cyrille): Do not auto-complete on mutually exclusive args (reviewers, auto, browse).
     parser = argparse.ArgumentParser(description='Start a review for your change list.')
-    parser.add_argument(
+    reviewer_action = parser.add_argument(
         'reviewers',
-        help='Github handles of the reviewers you want to assign to your review.', nargs='*',
-    ).completer = lambda **kw: _get_platform().get_available_reviewers()
+        help='Github handles of the reviewers you want to assign to your review.', nargs='*')
     parser.add_argument(
         '-a', '--auto', action='store_true', help='''
             Let the program choose an engineer to review for you.''')
-    parser.add_argument(
+    force_action = parser.add_argument(
         '-f', '--force', action='store_true', help='''
             [DEPRECATED]: The script now determines whether the push should be forced or not.''',
-    ).completer = argcomplete and argcomplete.SuppressCompleter()
+    )
     parser.add_argument(
         '-n', '--new', action='store_true', help='''
             Force to consider the last changes as a new review.
@@ -944,13 +972,16 @@ def main(string_args: Optional[List[str]] = None) -> None:
         Force the pull/merge request to be based on the given base branch on the remote.''')
     parser.add_argument('--no-cache', dest='cache', action='store_false', help='''
         Clear the cache mechanism on hub API calls.''')
-    parser.add_argument(
+    browse_action = parser.add_argument(
         '--browse', help='''
         Open the review in a browser window.
         Defaults to the remote branch attached to the current branch.''',
-        nargs='?', const=_BROWSE_CURRENT,
-    ).completer = lambda **kw: _get_platform().get_available_reviews()
+        nargs='?', const=_BROWSE_CURRENT)
     if argcomplete:
+        setattr(
+            reviewer_action, 'completer', lambda **kw: _get_platform().get_available_reviewers())
+        setattr(force_action, 'completer', argcomplete.SuppressCompleter())
+        setattr(browse_action, 'completer', lambda **kw: _get_platform().get_available_reviews())
         argcomplete.autocomplete(parser)
     args = parser.parse_args(string_args)
     # TODO(cyrille): Update log level depending on required verbosity.
