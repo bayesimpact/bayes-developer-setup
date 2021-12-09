@@ -1,7 +1,17 @@
-#!bash
+#!/usr/bin/env bash
 #
 # bash completion support for git-submit
 
+if [ -z "$GIT_SUBMIT_EXPERIMENTAL_PYTHON" ]; then
+  readonly PYTHON_SCRIPT="$HOME/.bayes-developer-setup/bin/git-submit.py"
+  eval "$(register-python-argcomplete --external-argcomplete-script "$PYTHON_SCRIPT" git-submit |
+    # Rename the auto-completion function to be caught by git completion.
+    sed 's!_python_argcomplete_'"$PYTHON_SCRIPT"'!_git_submit!' |
+    # Remove 'git' word from auto-completed line, to avoid parsing 'submit' as an argument to the script.
+    sed '/_git_submit/a\
+     [[ $COMP_LINE == "git "* ]] && COMP_LINE=${COMP_LINE:4} && ((COMP_POINT-=4));')"
+  return
+fi
 readonly ALL_OPTIONS=" -a --abort -f --force -u --user "
 
 __git_submit_options() {
