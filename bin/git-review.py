@@ -122,6 +122,7 @@ _WORD_REGEX = re.compile(r'\w+')
 # Default value for the browse action.
 _BROWSE_CURRENT = '__current__browse__'
 _IFS_REGEX = re.compile(r'[ \n]')
+_BRANCH_NAME_FORMAT = '--format=%(refname:short)'
 _MUTATION_REACT_COMMENT = '''mutation ReactComment($pullRequestId: ID!, $reaction: String!) {
   addComment(input: {body: $reaction, subjectId: $pullRequestId}) {
     commentEdge {
@@ -404,9 +405,11 @@ def _create_branch_for_review(merge_base: str, username: str) -> Optional[str]:
         for word in _WORD_REGEX.findall(_cleanup_branch_name(title).replace('_', '-'))[:2])
     prefix = f'{_REMOTE_REPO}/{username}-{branch}'
     suffixes = {
-        b[len(prefix):]
-        for b in _run_git(['branch', '-r', '--format=%(refname:short)']).split('\n')
-        if b.startswith(prefix)}
+        b.removeprefix(prefix)
+        for b in _run_git(['branch', '-r', _BRANCH_NAME_FORMAT, '--list', f'{prefix}*']).split('\n')
+    } | {
+        b.removeprefix(branch)
+        for b in _run_git(['branch', _BRANCH_NAME_FORMAT, '--list', f'{branch}*']).split('\n')}
     if suffixes:
         branch += next(
             f'-{counter:d}'
