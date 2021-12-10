@@ -1,102 +1,84 @@
-#!/usr/bin/env bash
-#
-# Check the staged changes before committing them.
+#!/usr/bin/env python3
+"""Pre commit hooks for git."""
 
-. "$(git --exec-path)/git-sh-setup"  # for cd_to_toplevel, die, say
-cd_to_toplevel
+import os
+import shutil
+import subprocess
+from typing import Union
+import unittest
 
-function diff_files() {
-  local params=()
-  while [ -n "$1" ] && [[ "$1" != "--" ]]; do
-    params+=("$1")
-    shift
-  done
-  git diff-index --cached "${params[@]}" -M HEAD "$@"
-}
 
-function check_circle_config() {
-  local config=".circleci/config.yml"
-  if [ -n "$GIT_COMMIT_IGNORE_CIRCLECI" ] || [ ! -f $config ]; then
-    >&2 say "Not a CircleCI repo."
-    return
-  fi
-  if ! command -v circleci > /dev/null && [ -z "$PRECOMMIT_NO_CIRCLECI_WARNING" ]; then
-    >&2 say "It looks like you're using CircleCI,
-      but its configuration validating tool is not installed."
-    >&2 say "To check configuration changes before committing them, please run 'npm -g i circleci'."
-    >&2 say "To avoid showing this message again, please set 'PRECOMMIT_NO_CIRCLECI_WARNING=1'"
-    return
-  fi
-  # Validate the Circle CI config, if it changed.
-  diff_files --quiet -- $config || circleci config validate $config > /dev/null ||
-    echo "CircleCI config is not valid."
-}
+def _run(*args: str) -> str:
+    return subprocess.check_output(args, text=True).strip()
 
-function set_difference() {
-  # Difference between the two given files, where each file is considered as the set of its lines.
-  sort "$1" "$2" "$2" | uniq -u
-}
 
-function check_bazel_files() {
-  if [ -n "$GIT_COMMIT_IGNORE_BAZEL_FILES" ] || [ ! -f "WORKSPACE" ]; then
-    >&2 say "Not a Bazel workspace."
-    return
-  fi
-  local changed_builds=$(mktemp) changed_imports=$(mktemp) untouched_build_files unchanged_tree
-  if diff_files --exit-code --name-only -- '**/BUILD' > "$changed_builds"; then
-    unchanged_tree=1
-  fi
-  diff_files --name-only -G'^(|from \S* )import.*' | sed -E 's|/[^/]+$|/BUILD|' | uniq > "$changed_imports"
-  untouched_build_files="$(set_difference "$changed_imports" "$changed_builds")"
-  rm "$changed_builds" "$changed_imports"
-  if [ -n "$untouched_build_files" ]; then
-    >&2 say "BUILD files to updates:"
-    >&2 say "$untouched_build_files"
-    echo 'It looks like some of your import changes were not reported to Bazel.'
-    echo "If you're confident with your changes, rerun 'git commit' with GIT_COMMIT_IGNORE_BAZEL_FILES=1 to ignore this hook."
-    return 1
-  fi
-  if test -z "$unchanged_tree"; then
-    return 1
-  fi
-}
+_ROOT_DIR = _run('git', 'rev-parse', '--show-toplevel')
 
-function check_bazel_tree() {
-  if [ -n "$GIT_COMMIT_IGNORE_BAZEL" ] || [ ! -f "WORKSPACE" ] || ! command -v bazel > /dev/null || test ! -f '.circleci/BUILD'; then
-    return
-  fi
-  if ! bazel query 'deps(//.circleci/...)' > /dev/null; then
-    echo 'Bazel resolution failed'
-  fi
-}
 
-function check_npm_funding() {
-  if [ -n "$GIT_COMMIT_IGNORE_NPM_FUNDING" ] || ! command -v jq > /dev/null || [[ $(git config remote.origin.url) != *bayesimpact* ]]; then
-    return
-  fi
-  shopt -s globstar
-  local should_give_info
-  for package in **/package.json; do
-    if ! jq -e '.funding' $package > /dev/null; then
-      echo "Please add our funding information to $package"
-      should_give_info=1
-    fi
-    if [ -n "$should_give_info" ]; then
-      echo "Add the following line to each file:"
-      echo '  "funding": "https://www.helloasso.com/associations/bayes-impact-france/formulaires/5",'
-    fi
-  done
-}
+def _miss_git_file(path: str) -> bool:
+    return not os.path.exists(os.path.join(_ROOT_DIR, path))
 
-readonly MESSAGE_FILE="$(mktemp)"
-check_circle_config >> "$MESSAGE_FILE"
-if check_bazel_files >> "$MESSAGE_FILE"; then
-  check_bazel_tree >> "$MESSAGE_FILE"
-fi
-check_npm_funding >> "$MESSAGE_FILE"
 
-readonly MSG="$(cat $MESSAGE_FILE)"
-rm "$MESSAGE_FILE"
-if [ -n "$MSG" ]; then
-  die "$MSG"
-fi
+def _get_diff(*args: str, **kwargs: Union[str, bool]) -> str:
+    diff_args = [
+        arg
+        for key, value in kwargs.items()
+        if value
+        for arg in (f"{'-' * min(2, len(key))}{key.replace('_', '-')}", value)
+        if isinstance(arg, str)]
+    return _run('git', 'diff-index', '--cached', *diff_args, 'HEAD', '--', *args)
+
+
+class PreCommitTestCase(unittest.TestCase):
+    """Run tests before commiting changes to git."""
+
+    @unittest.skipIf(os.getenv('GIT_COMMIT_IGNORE_CIRCLECI'), 'Ignoring CircleCI config')
+    @unittest.skipIf(_miss_git_file('.circleci/config.yml'), 'Not a CircleCI repo')
+    @unittest.skipIf(not shutil.which('circleci'), 'CircleCI tool is not installed')
+    def test_circle_config(self) -> None:
+        """Check that CircleCI's config is valid."""
+
+        config = os.path.join(_ROOT_DIR, '.circleci/config.yml')
+        try:
+            _get_diff(config, quiet=True)
+            return
+        except subprocess.CalledProcessError:
+            # Config file has been modified. Let's check if it's valid.
+            pass
+        try:
+            _run('circleci', 'config', 'validate', config)
+            return
+        except subprocess.CalledProcessError:
+            self.fail('CircleCI config is not valid.')
+
+    @unittest.skipIf(os.getenv('GIT_COMMIT_IGNORE_BAZEL_FILES'), 'Ignoring Bazel files')
+    @unittest.skipIf(_miss_git_file('WORKSPACE'), 'Not a Bazel workspace')
+    def test_bazel_files(self) -> None:
+        """Check if enough Bazel files have been changed."""
+
+        changed_builds = set(_get_diff('**/BUILD', name_only=True).split('\n'))
+        changed_imports = {
+            os.path.join(os.path.dirname(file), 'BUILD')
+            # TODO(cyrille): Do a finer check on the changed imports.
+            for file in _get_diff(name_only=True, G=r'^(from \S* )?import.*').split('\n')}
+        self.assertEqual(
+            changed_builds, changed_imports,
+            msg='It looks like some of your import changes were not reported to Bazel.'
+            "If you're confident with your changes, re-run 'git commit' with "
+            'GIT_COMMIT_IGNORE_BAZEL_FILES=1 to ignore this hook.')
+
+    @unittest.skipIf(os.getenv('GIT_COMMIT_IGNORE_BAZEL'), 'Ignoring Bazel tree')
+    @unittest.skipIf(_miss_git_file('WORKSPACE'), 'Not a Bazel workspace')
+    @unittest.skipIf(_miss_git_file('.circleci/BUILD'), 'No Bazel rules defined for CircleCI')
+    @unittest.skipIf(not shutil.which('bazel'), 'Bazel is not installed')
+    def test_bazel_tree(self) -> None:
+        """Check that Bazel can parse its dependency tree."""
+
+        try:
+            _run('bazel', 'query', 'deps(//.circleci/...)')
+        except subprocess.CalledProcessError:
+            self.fail('Bazel resolution failed')
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=0, buffer=True)
