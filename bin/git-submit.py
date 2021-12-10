@@ -3,6 +3,7 @@
 """Submit a PR after the relevant checks have been done."""
 
 import argparse
+import contextlib
 import functools
 import io
 import json
@@ -12,8 +13,11 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
+import threading
+import time
 import typing
-from typing import Any, Iterator, NoReturn, Optional, Sequence, Union
+from typing import Any, Callable, Iterable, Iterator, Literal, NoReturn, Optional, Sequence, Union
 
 try:
     import argcomplete
@@ -23,12 +27,123 @@ except ImportError:
 
 # Whether we should print each command before running it (bash xtrace), and the prefix to use.
 _XTRACE_PREFIX: list[str] = []
-# Whether we should run all hub commands without cache.
-_CACHE_BUSTER: list[str] = []
 _IFS_REGEX = re.compile(r'[ \n]')
 _ONE_DAY = 86400
 _TEN_MINUTES = 600
 _ONE_MINUTE = 60
+
+
+_CacheIndexKeyTuple = tuple[tuple[str, ...], tuple[tuple[str, str], ...]]
+_CacheIndexKeyList = list[list[Union[str, list[str]]]]
+_CacheIndexValueTuple = tuple[int, str]
+_CacheIndexValueList = list[Union[int, str]]
+
+
+def list2tuple_key(key: _CacheIndexKeyList) -> _CacheIndexKeyTuple:
+    if len(key) != 2:
+        raise ValueError('A cache key was wrongly serialized')
+    args_list, kwargs_list = key
+    if any(not isinstance(arg, str) for arg in args_list):
+        raise ValueError('A cache key was wrongly serialized')
+    args: tuple[str, ...] = tuple(typing.cast(list[str], args_list))
+    kwarg_tuples_list: list[tuple[str, str]] = []
+    for kwarg_list in kwargs_list:
+        if isinstance(kwarg_list, str) or len(kwarg_list) != 2:
+            raise ValueError('A cache key was wrongly serialized')
+        kwarg_tuples_list.append(typing.cast(tuple[str, str], tuple(kwarg_list)))
+    return args, tuple(kwarg_tuples_list)
+
+
+def tuple2list_key(key: _CacheIndexKeyTuple) -> _CacheIndexKeyList:
+    args, kwargs = key
+    return [list(args), [[key, value] for key, value in kwargs]]
+
+
+def args2tuple(args: Iterable[Any], kwargs: dict[str, Any]) -> _CacheIndexKeyTuple:
+    tuple_args = tuple(str(arg) for arg in args)
+    tuple_kwargs = tuple(sorted((k, str(v)) for k, v in kwargs.items()))
+    return tuple_args, tuple_kwargs
+
+
+def list2tuple_value(value: _CacheIndexValueList) -> _CacheIndexValueTuple:
+    if len(value) != 2:
+        raise ValueError('A cache value was wrongly serialized')
+    timestamp, result = value
+    if isinstance(timestamp, int) and isinstance(result, str):
+        return timestamp, result
+    raise ValueError('A cache value was wrongly serialized')
+
+
+def tuple2list_value(value: _CacheIndexValueTuple) -> _CacheIndexValueList:
+    return list(value)
+
+
+class _Cache:
+
+    is_cached: bool
+
+    @functools.cached_property
+    def _index(self) -> str:
+        if cache_index := _run('git', 'config', '--default', '', 'submit.cache'):
+            return cache_index
+        with tempfile.NamedTemporaryFile(delete=False) as file:
+            pass
+        _run('git', 'config', 'submit.cache', file.name)
+        return file.name
+
+    @contextlib.contextmanager
+    def _indexed_content(self) -> Iterator[Any]:
+        with open(self._index, 'a+', encoding='utf-8') as index:
+            index.seek(0)
+            try:
+                saved_cache = json.load(index)
+            except json.decoder.JSONDecodeError:
+                saved_cache = {}
+            try:
+                yield saved_cache
+            finally:
+                index.truncate(0)
+                json.dump(saved_cache, index)
+
+    @functools.cached_property
+    def _cached_values(self) -> dict[_CacheIndexKeyTuple, _CacheIndexValueTuple]:
+        with self._indexed_content() as json_index:
+            return {
+                list2tuple_key(json.loads(key)): list2tuple_value(value)
+                for key, value in json_index.items()}
+
+    def _cache_value(self, args: Iterable[Any], kwargs: dict[str, Any], cache: int, value: str) \
+            -> None:
+        cache_key = tuple2list_key(args2tuple(args, kwargs))
+        cache_value = tuple2list_value((cache + int(time.time()), value))
+        with self._indexed_content() as saved_cache:
+            saved_cache[json.dumps(cache_key)] = json.dumps(cache_value)
+            return
+
+    def _get_cache(self, args: Iterable[Any], kwargs: dict[str, Any]) -> Optional[str]:
+        cache_content = self._cached_values.get(args2tuple(args, kwargs))
+        if not cache_content:
+            return None
+        timestamp, value = cache_content
+        if timestamp < time.time():
+            return None
+        return value
+
+    # Make this generic on the called function if ever needed.
+    def run(self, *args: str, silently: bool = False, cache: int) -> str:
+        """Wrap _run to enable it to be cached in the file system."""
+
+        kwargs = {'silently': silently}
+        if not self.is_cached:
+            return _run(*args, silently=silently)
+        if cached := self._get_cache(args, kwargs):
+            return cached
+        self._cache_value(args, kwargs, cache, value := _run(*args, silently=silently))
+        return value
+
+
+# Whether we should run all hub commands without cache.
+_CACHE = _Cache()
 
 
 def _xtrace(command: Sequence[str], *, prefix_cache: list[str] = _XTRACE_PREFIX) -> None:
@@ -72,7 +187,7 @@ def _run(*args: str, silently: bool = False) -> str:
 
 def _run_hub(*args: str, cache: Optional[int] = None, silently: bool = False) -> str:
     final_command = ('hub',) + args
-    if cache and not _CACHE_BUSTER:
+    if cache and _CACHE.is_cached:
         final_command += ('--cache', str(cache))
     _xtrace(final_command)
     return _run(*final_command, silently=silently)
@@ -248,18 +363,18 @@ def _is_git_clean() -> bool:
 
 def _get_base_remote() -> str:
     try:
-        return _run('git', 'config', 'branch.main.remote', silently=True)
+        return _CACHE.run('git', 'config', 'branch.main.remote', silently=True, cache=_ONE_DAY)
     except subprocess.CalledProcessError:
         try:
-            return _run('git', 'config', 'branch.master.remote', silently=True)
+            return _CACHE.run('git', 'config', 'branch.master.remote', silently=True, cache=_ONE_DAY)
         except subprocess.CalledProcessError:
             return 'origin'
 
 
 def _get_remote_head(base_remote: str) -> str:
     try:
-        return _run(
-            'git', 'rev-parse', '--abbrev-ref', f'{base_remote}/HEAD').split('/')[1]
+        return _CACHE.run(
+            'git', 'rev-parse', '--abbrev-ref', f'{base_remote}/HEAD', cache=_ONE_DAY).split('/')[1]
     except subprocess.CalledProcessError:
         pass
     if _can_use_hub():
@@ -594,9 +709,7 @@ def _prepare_args(args: _Arguments) -> _Arguments:
         args.user = _run('git', 'config', 'user.email').split('@', 1)[0]
     if not args.branch:
         args.branch = _START_BRANCH
-    if not args.cache:
-        del _CACHE_BUSTER[:]
-        _CACHE_BUSTER.append('busted')
+    _CACHE.is_cached = args.cache
     args.default = _get_default_branch()
     args.prefix = f'{args.default.remote}/{args.user}-' if args.abort else None
     return args
