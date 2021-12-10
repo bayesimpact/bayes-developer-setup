@@ -21,6 +21,7 @@
     "url": "https://github.com/bayesimpact/bayes-developer-setup/issues"
   },
   "homepage": "https://github.com/bayesimpact/bayes-developer-setup#readme",
+  "funding": "https://www.helloasso.com/associations/bayes-impact-france/formulaires/5",
   "devDependencies": {
     "chai": "^3.5.0",
     "eslint": "^6.x.x",
