@@ -4,6 +4,7 @@
 
 import argparse
 import functools
+import io
 import json
 import logging
 import os
@@ -12,7 +13,7 @@ import shutil
 import subprocess
 import sys
 import typing
-from typing import Any, NoReturn, Optional, Sequence, Union
+from typing import Any, Iterator, NoReturn, Optional, Sequence, Union
 
 try:
     import argcomplete
@@ -41,16 +42,32 @@ def _xtrace(command: Sequence[str], *, prefix_cache: list[str] = _XTRACE_PREFIX)
         ) + '\n')
 
 
-def _run(*args: str, silently: bool = False) -> str:
+def _run_stream(*args: str, silently: bool = False) -> Iterator[str]:
     _xtrace(args)
-    try:
-        return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT).strip()
-    except subprocess.CalledProcessError as error:
-        if not silently:
-            logging.error('An error occurred while running:')
-            _xtrace(args, prefix_cache=['>'])
-            logging.error(error.output.strip())
-        raise
+    executable = shutil.which(args[0])
+    if not executable:
+        raise ValueError(f'Unable to find executable {args[0]}')
+    stdout = io.StringIO()
+    with subprocess.Popen(
+            [executable] + list(args[1:]),
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    ) as proc:
+        if not proc.stdout:
+            return
+        for line in proc.stdout:
+            stdout.write(line)
+            yield line.strip()
+    if not silently and proc.returncode:
+        logging.error('An error occurred while running:')
+        _xtrace(args, prefix_cache=['>'])
+        logging.error(stdout.getvalue().strip())
+    if proc.returncode:
+        raise subprocess.CalledProcessError(
+            proc.returncode, args[0], output=stdout.getvalue().strip())
+
+
+def _run(*args: str, silently: bool = False) -> str:
+    return '\n'.join(_run_stream(*args, silently=silently))
 
 
 def _run_hub(*args: str, cache: Optional[int] = None, silently: bool = False) -> str:
@@ -242,7 +259,7 @@ def _get_base_remote() -> str:
 def _get_remote_head(base_remote: str) -> str:
     try:
         return _run(
-            'git', 'rev-parse', '--abbrev-ref', f'{base_remote}/HEAD', silently=True).split('/')[1]
+            'git', 'rev-parse', '--abbrev-ref', f'{base_remote}/HEAD').split('/')[1]
     except subprocess.CalledProcessError:
         pass
     if _can_use_hub():
@@ -261,9 +278,10 @@ def _get_default_branch() -> _Branch:
     base_remote: str = _get_base_remote()
     remote_head: str = _get_remote_head(base_remote)
     full_remote_head = f'{base_remote}/{remote_head}'
-    for branch in _run('git', 'for-each-ref', '--format=%(refname:short)', 'refs/heads').split('\n'):
+    for branch in _run_stream('git', 'for-each-ref', '--format=%(refname:short)', 'refs/heads'):
         try:
-            remote = _run('git', 'rev-parse', '--abbrev-ref', f'{branch}@{{upstream}}', silently=True)
+            remote = _run(
+                'git', 'rev-parse', '--abbrev-ref', f'{branch}@{{upstream}}', silently=True)
         except subprocess.CalledProcessError:
             continue
         if remote == full_remote_head:
@@ -284,18 +302,19 @@ def _get_local_branches(default_branch: str) -> list[str]:
     The default branch is excluded.
     """
 
-    all_branches = _run('git', 'branch', '--format=%(refname:short)').split('\n')
-    all_branches.remove(default_branch)
-    return all_branches
+    return [
+        branch
+        for branch in _run_stream('git', 'branch', '--format=%(refname:short)')
+        if branch != default_branch]
 
 
 def _get_remote_prefixed_branches(remote_prefix: str) -> list[str]:
     return [
         branch.removeprefix(remote_prefix)
-        for branch in _run(
+        for branch in _run_stream(
             'git', 'branch', '-r', '--format=%(refname:short)',
-            '--list', f'{remote_prefix}*',
-        ).split('\n')]
+            '--list', f'{remote_prefix}*')
+        if branch]
 
 
 def _show_available_branches(default_branch: str, remote_prefix: Optional[str] = None) -> None:
@@ -421,7 +440,7 @@ def _should_auto_merge(branch: str, should_force: bool, pr_infos: Optional[_PrIn
         _run_hub('ci-status', branch, silently=True)
         return False
     except subprocess.CalledProcessError as error:
-        ci_status = error.output.strip()
+        ci_status = error.output
     if should_force:
         logging.warning('forcing submission despite CI status "%s".', ci_status)
         return bool(_GIT_SUBMIT_AUTO_MERGE)
@@ -596,9 +615,9 @@ def _user_completer(*, prefix: str, parsed_args: _Arguments, **unused_kwargs: An
     remote_prefix = f'{args.default.remote}/'
     return {
         name.removeprefix(remote_prefix).split('-', 1)[0]
-        for name in _run(
+        for name in _run_stream(
             'git', 'branch', '-r', '--format=%(refname:short)',
-            '--list', f'{remote_prefix}{prefix}*').split('\n')
+            '--list', f'{remote_prefix}{prefix}*')
         if '-' in name}
 
 
