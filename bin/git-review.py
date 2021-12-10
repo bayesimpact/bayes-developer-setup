@@ -140,6 +140,7 @@ _WORD_REGEX = re.compile(r'\w+')
 # Default value for the browse action.
 _BROWSE_CURRENT = '__current__browse__'
 _IFS_REGEX = re.compile(r'[ \n]')
+_BRANCH_NAME_FORMAT = '--format=%(refname:short)'
 _MUTATION_REACT_COMMENT = '''mutation ReactComment($pullRequestId: ID!, $reaction: String!) {
   addComment(input: {body: $reaction, subjectId: $pullRequestId}) {
     commentEdge {
@@ -425,15 +426,19 @@ def _create_branch_for_review(merge_base: str, username: str) -> Optional[str]:
         # No new commit to review.
         return None
     title = _run_git(['log', '-1', r'--format=%s'])
+    prefix = f'{_REMOTE_REPO}/{username}-'
     # Create a clean branch name from the first two words of the commit message.
     branch = '-'.join(
         word.lower()
         for word in _WORD_REGEX.findall(_cleanup_branch_name(title).replace('_', '-'))[:2])
-    prefix = f'{_REMOTE_REPO}/{username}-{branch}'
     suffixes = {
-        b[len(prefix):]
-        for b in _run_git(['branch', '-r', '--format=%(refname:short)']).split('\n')
-        if b.startswith(prefix)}
+        b.removeprefix(prefix).removeprefix(branch)
+        for b in _run_git([
+            'branch', '-a', _BRANCH_NAME_FORMAT,
+            '-l', f'{prefix}{branch}*',
+            '-l', f'{branch}*']).split('\n')
+        if b
+    }
     if suffixes:
         branch += next(
             f'-{counter:d}'
