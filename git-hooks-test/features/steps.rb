@@ -2,6 +2,13 @@ Given(/^I use the defined hooks$/) do
   step %(I successfully run `git config --global core.hooksPath /usr/share/hooks`)
 end
 
+Given(/^I use the defined hook "([^"]+)"$/) do |hook_name|
+  step %(I successfully run `mkdir -p /usr/share/hooks/temp`)
+  step %(I successfully run `rm -r /usr/share/hooks/temp/*`)
+  step %(I successfully run `cp /usr/share/hooks/#{hook_name} /usr/share/hooks/temp`)
+  step %(I successfully run `git config --global core.hooksPath /usr/share/hooks/temp`)
+end
+
 Given(/^I am in a dummy git repo in "([^"]+)"$/) do |dir_name|
   step %(a directory named "#{dir_name}")
   step %(I cd to "#{dir_name}")

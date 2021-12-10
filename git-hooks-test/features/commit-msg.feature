@@ -1,7 +1,7 @@
 Feature: commit-msg
 
   Background:
-    Given I use the defined hooks
+    Given I use the defined hook "commit-msg"
 
   Scenario: Successful commit
     Given I am in a dummy git repo in "repo"
