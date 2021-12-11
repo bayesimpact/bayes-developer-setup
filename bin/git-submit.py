@@ -278,16 +278,14 @@ def _get_default_branch() -> _Branch:
     base_remote: str = _get_base_remote()
     remote_head: str = _get_remote_head(base_remote)
     full_remote_head = f'{base_remote}/{remote_head}'
-    for branch in _run_stream('git', 'for-each-ref', '--format=%(refname:short)', 'refs/heads'):
-        try:
-            remote = _run(
-                'git', 'rev-parse', '--abbrev-ref', f'{branch}@{{upstream}}', silently=True)
-        except subprocess.CalledProcessError:
-            continue
-        if remote == full_remote_head:
-            local = branch
-            break
-    else:
+    local = next((
+        local_and_remote[0]
+        for ref in _run_stream(
+            'git', 'for-each-ref', '--format=%(refname:short):%(upstream:short)',
+            '--sort=-committerdate', 'refs/heads')
+        if (local_and_remote := ref.split(':', 1))
+        if local_and_remote[1] == full_remote_head), None)
+    if not local:
         logging.warning(
             '"%s" is not checked out locally. checking it as "%s".', full_remote_head, remote_head)
         _run('git', 'branch', remote_head, '--track', full_remote_head)
