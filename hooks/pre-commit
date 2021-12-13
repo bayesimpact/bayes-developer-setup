@@ -74,6 +74,20 @@ class PreCommitTestCase(unittest.TestCase):
             'If you are confident with your changes, re-commit your changes with '
             'GIT_COMMIT_IGNORE_BAZEL_FILES=1 to ignore this hook.')
 
+    @unittest.skipIf(os.getenv('GIT_COMMIT_IGNORE_BAZEL_FILES'), 'Ignoring Bazel files')
+    @unittest.skipIf(_miss_git_file('WORKSPACE'), 'Not a Bazel workspace')
+    def test_files_in_bazel(self) -> None:
+        """Check if diff files are in the Bazel tree."""
+
+        changed_files = (
+            file
+            for file in _get_diff(name_only=True).split('\n')
+            if os.path.exists(file))
+        try:
+            _run('bazel', 'query', f'set({" ".join(changed_files)})')
+        except subprocess.CalledProcessError:
+            self.fail('Some diffed files are not in Bazel dependency tree')
+
     @unittest.skipIf(os.getenv('GIT_COMMIT_IGNORE_BAZEL'), 'Ignoring Bazel tree')
     @unittest.skipIf(_miss_git_file('WORKSPACE'), 'Not a Bazel workspace')
     @unittest.skipIf(_miss_git_file('.circleci/BUILD'), 'No Bazel rules defined for CircleCI')
