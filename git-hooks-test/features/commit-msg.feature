@@ -1,7 +1,7 @@
 Feature: commit-msg
 
   Background:
-    Given I use the defined hooks
+    Given I use the defined hook "commit-msg"
 
   Scenario: Successful commit
     Given I am in a dummy git repo in "repo"
@@ -14,7 +14,7 @@ Feature: commit-msg
     And the file "successful submission" should exist
     And the git status should be clean
 
-  Scenario:
+  Scenario: Topic wrongly cased
     Given I am in a dummy git repo in "repo"
     When I commit a file "new file" with message:
       """

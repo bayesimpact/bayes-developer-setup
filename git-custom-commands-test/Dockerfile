@@ -12,5 +12,5 @@ RUN gem install contracts -v 0.16.1; gem install cucumber -v=2.3.2; gem install 
 # "Install" git-submit.
 ADD bin /usr/bin
 COPY git-custom-commands-test /test
-ARG SKIP_TEST
+ARG SKIP_TEST=
 RUN test -n "$SKIP_TEST" && echo "Skipping tests" || cucumber
