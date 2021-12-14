@@ -118,4 +118,4 @@ class PreCommitTestCase(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main(verbosity=0, buffer=True)
+    unittest.main(verbosity=os.getenv('GIT_PRECOMMIT_SKIPPING_REASONS') and 2 or 0, buffer=True)
