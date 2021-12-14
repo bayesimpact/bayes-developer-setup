@@ -3,10 +3,23 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from typing import Union
 import unittest
+
+try:
+    import isort
+
+    def _is_stdlib(lib_name: str, /) -> bool:
+        return isort.place_module(lib_name) == isort.sections.STDLIB
+except ImportError:
+    def _is_stdlib(unused_lib_name: str, /) -> bool:
+        return False
+
+_DIFF_LINE_REGEX = re.compile(r'^[-+]\s+')
+_PYTHON_IMPORT_REGEX = re.compile(r'^(from (\S+) )?import (.*)')
 
 
 def _run(*args: str, silently: bool = False) -> str:
@@ -32,7 +45,16 @@ def _get_diff(*args: str, **kwargs: Union[str, bool]) -> str:
         if value
         for arg in (f"{'-' * min(2, len(key))}{key.replace('_', '-')}", value)
         if isinstance(arg, str)]
-    return _run('git', 'diff-index', '--cached', *diff_args, 'HEAD', '--', *args)
+    return _run('git', 'diff', '--cached', *diff_args, 'HEAD', '--', *args)
+
+
+def _have_only_stdlib_imports(file: str) -> bool:
+    return all(
+        _is_stdlib(lib_name)
+        for line in _get_diff(file).split('\n')
+        if _DIFF_LINE_REGEX.match(line)
+        if (match := _PYTHON_IMPORT_REGEX.match(line.lstrip('+- ')))
+        if (lib_name := (match.group(2) or match.group(3)).split('.', 1)[0]))
 
 
 class PreCommitTestCase(unittest.TestCase):
@@ -66,8 +88,9 @@ class PreCommitTestCase(unittest.TestCase):
         changed_imports = {
             os.path.join(os.path.dirname(file), 'BUILD')
             # TODO(cyrille): Do a finer check on the changed imports.
-            for file in _get_diff(name_only=True, G=r'^(from \S* )?import.*').split('\n')
-            if file}
+            for file in _get_diff(name_only=True, G=_PYTHON_IMPORT_REGEX.pattern).split('\n')
+            if file
+            if not (file.endswith('.py') and _have_only_stdlib_imports(file))}
         self.assertEqual(
             changed_builds, changed_imports,
             msg='It looks like some of your import changes were not reported to Bazel.\n'
