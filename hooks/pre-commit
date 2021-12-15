@@ -117,5 +117,12 @@ class PreCommitTestCase(unittest.TestCase):
                     '\thttps://www.helloasso.com/associations/bayes-impact-france/formulaires/5')
 
 
+def main() -> None:
+    """Execute the relevant hooks."""
+
+    should_show_skipping_reason = bool(os.getenv('GIT_PRECOMMIT_SKIPPING_REASONS'))
+    unittest.main(verbosity=2 if should_show_skipping_reason else 0, buffer=True)
+
+
 if __name__ == '__main__':
-    unittest.main(verbosity=0, buffer=True)
+    main()
