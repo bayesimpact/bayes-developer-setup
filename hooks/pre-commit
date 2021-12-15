@@ -3,10 +3,23 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
-from typing import Union
+from typing import Optional, Union
 import unittest
+
+try:
+    import isort
+
+    def _is_stdlib(lib_name: str, /) -> bool:
+        return isort.place_module(lib_name) == isort.sections.STDLIB
+except ImportError:
+    def _is_stdlib(unused_lib_name: str, /) -> bool:
+        return False
+
+_DIFF_LINE_REGEX = re.compile(r'^[-+]\s+')
+_PYTHON_IMPORT_REGEX = re.compile(r'^(from (\S+) )?import (.*)')
 
 
 def _run(*args: str, silently: bool = False) -> str:
@@ -32,7 +45,24 @@ def _get_diff(*args: str, **kwargs: Union[str, bool]) -> str:
         if value
         for arg in (f"{'-' * min(2, len(key))}{key.replace('_', '-')}", value)
         if isinstance(arg, str)]
-    return _run('git', 'diff-index', '--cached', *diff_args, 'HEAD', '--', *args)
+    return _run('git', 'diff', '--cached', *diff_args, 'HEAD', '--', *args)
+
+
+def _get_packages(python_content: str) -> set[str]:
+    return {
+        '.'.join(filter(None, [match.group(2), match.group(3)]))
+        for line in python_content.split('\n')
+        if line
+        if (match := _PYTHON_IMPORT_REGEX.match(line))}
+
+
+def _changed_python_imports(file: str, previous_file: Optional[str] = None) -> list[str]:
+    if not file.endswith('.py'):
+        return ['Not a python module. Check by hand']
+    with open(file, encoding='utf-8') as current_file:
+        current_packages = _get_packages(current_file.read())
+    old_packages = _get_packages(_run('git', 'show', f'HEAD:{previous_file or file}'))
+    return [lib for lib in old_packages ^ current_packages if not _is_stdlib(lib)]
 
 
 class PreCommitTestCase(unittest.TestCase):
@@ -62,12 +92,15 @@ class PreCommitTestCase(unittest.TestCase):
     def test_bazel_files(self) -> None:
         """Check if enough Bazel files have been changed."""
 
+        # TODO(cyrille): Do a finer check on the changed BUILD files.
         changed_builds = {b for b in _get_diff('**/BUILD', name_only=True).split('\n') if b}
         changed_imports = {
             os.path.join(os.path.dirname(file), 'BUILD')
             # TODO(cyrille): Do a finer check on the changed imports.
-            for file in _get_diff(name_only=True, G=r'^(from \S* )?import.*').split('\n')
-            if file}
+            for file in _get_diff(name_only=True, G=_PYTHON_IMPORT_REGEX.pattern).split('\n')
+            if file
+            if _changed_python_imports(file)}
+        # TODO(cyrille): Make a more explicit error message.
         self.assertEqual(
             changed_builds, changed_imports,
             msg='It looks like some of your import changes were not reported to Bazel.\n'
