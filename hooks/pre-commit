@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Pre commit hooks for git."""
 
+import functools
 import json
+import logging
 import os
 import re
 import shutil
@@ -12,14 +14,11 @@ import unittest
 try:
     import isort
 
-    def _is_stdlib(lib_name: str, /) -> bool:
+    def _is_python_stdlib(lib_name: str, /) -> bool:
         return isort.place_module(lib_name) == isort.sections.STDLIB
 except ImportError:
-    def _is_stdlib(unused_lib_name: str, /) -> bool:
+    def _is_python_stdlib(unused_lib_name: str, /) -> bool:
         return False
-
-_DIFF_LINE_REGEX = re.compile(r'^[-+]\s+')
-_PYTHON_IMPORT_REGEX = re.compile(r'^(from (\S+) )?import (.*)')
 
 
 def _run(*args: str, silently: bool = False) -> str:
@@ -30,6 +29,33 @@ def _run(*args: str, silently: bool = False) -> str:
             return ''
         raise
 
+
+@functools.cache
+def _node_default_imports() -> set[str]:
+    node_exec = shutil.which('node')
+    if not node_exec:
+        return set()
+    try:
+        return set(
+            json.loads(_run(node_exec, '-p', 'JSON.stringify(require("repl")._builtinLibs)')))
+    except json.decoder.JSONDecodeError as error:
+        logging.warning('Unable to load node builtin libs.', exc_info=error)
+        return set()
+
+
+def _is_node_stdlib(lib_name: str) -> bool:
+    return lib_name.rsplit('.', 1)[-1].strip('\'"') in _node_default_imports()
+
+
+def _is_stdlib(lib_name: str, filename: str, /) -> bool:
+    if filename.removesuffix('x').endswith('.ts'):
+        return _is_node_stdlib(lib_name)
+    # Python scripts may not have a '.py' extension, so we don't check for it.
+    return _is_python_stdlib(lib_name)
+
+
+_DIFF_LINE_REGEX = re.compile(r'^[-+]\s+')
+_PYTHON_IMPORT_REGEX = re.compile(r'^(from (\S+) )?import (.*)')
 
 _ROOT_DIR = _run('git', 'rev-parse', '--show-toplevel')
 
@@ -49,20 +75,22 @@ def _get_diff(*args: str, **kwargs: Union[str, bool]) -> str:
 
 
 # TODO(cyrille): Separate better silent imports from others.
-def _get_packages(python_content: str) -> set[str]:
+def _get_packages(python_content: str, filename: str) -> set[str]:
     return {
         lib
         for line in python_content.split('\n')
         if line
         if (match := _PYTHON_IMPORT_REGEX.match(line))
-        if not _is_stdlib(lib := '.'.join(filter(None, [match.group(2), match.group(3)])))}
+        if not _is_stdlib(
+            lib := '.'.join(filter(None, [match.group(2), match.group(3)])), filename)}
 
 
 def _changed_imports(file: str, previous_file: Optional[str] = None) \
-        -> tuple[list[str], list[str]]:
+        -> tuple[set[str], set[str]]:
     with open(file, encoding='utf-8') as current_file:
-        current_packages = _get_packages(current_file.read())
-    old_packages = _get_packages(_run('git', 'show', f'HEAD:{previous_file or file}'))
+        current_packages = _get_packages(current_file.read(), file)
+    old_packages = _get_packages(
+        _run('git', 'show', f'HEAD:{previous_file or file}'), previous_file or file)
     return old_packages, current_packages
 
 
