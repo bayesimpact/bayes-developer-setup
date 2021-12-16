@@ -8,7 +8,7 @@ import os
 import re
 import shutil
 import subprocess
-from typing import Optional, Union
+from typing import Match, Optional, Pattern, Union
 import unittest
 
 try:
@@ -30,32 +30,70 @@ def _run(*args: str, silently: bool = False) -> str:
         raise
 
 
-@functools.cache
-def _node_default_imports() -> set[str]:
-    node_exec = shutil.which('node')
-    if not node_exec:
-        return set()
-    try:
-        return set(
-            json.loads(_run(node_exec, '-p', 'JSON.stringify(require("repl")._builtinLibs)')))
-    except json.decoder.JSONDecodeError as error:
-        logging.warning('Unable to load node builtin libs.', exc_info=error)
-        return set()
+# TODO(cyrille): Parse the content from here.
+# TODO(cyrille): Use a factory from the filename.
+class _FileParser:
+
+    import_regex: Pattern[str]
+
+    def is_stdlib_import(self, module: str) -> bool:
+        """Whether the given module is from standard library in the given file format."""
+
+        raise NotImplementedError('')
+
+    def match2module(self, match: Match[str]) -> str:
+        """How to get a module name from an import_regex match."""
+
+        raise NotImplementedError('')
+
+    def get_packages(self, content: str) -> set[str]:
+        """Get the packages needed for the parsed file (assuming the stdlib is already here)."""
+
+        return {
+            lib_name for match in self.import_regex.finditer(content)
+            if not self.is_stdlib_import(lib_name := self.match2module(match))}
 
 
-def _is_node_stdlib(lib_name: str) -> bool:
-    return lib_name.rsplit('.', 1)[-1].strip('\'"') in _node_default_imports()
+class _TypescriptParser(_FileParser):
+
+    import_regex = re.compile(r"^import( type)?( \w+,?)?(\s*{([^}]|\n)*})?(\s*from\s*)?'(.*)'$")
+
+    @staticmethod
+    @functools.cache
+    def node_default_imports() -> set[str]:
+        """Get the node stdlib once and for all."""
+
+        node_exec = shutil.which('node')
+        if not node_exec:
+            return set()
+        try:
+            return set(
+                json.loads(_run(node_exec, '-p', 'JSON.stringify(require("repl")._builtinLibs)')))
+        except json.decoder.JSONDecodeError as error:
+            logging.warning('Unable to load node builtin libs.', exc_info=error)
+            return set()
+
+    def is_stdlib_import(self, module: str) -> bool:
+        return module in self.node_default_imports()
+
+    def match2module(self, match: Match[str]) -> str:
+        return match.group(6)
 
 
-def _is_stdlib(lib_name: str, filename: str, /) -> bool:
-    if filename.removesuffix('x').endswith('.ts'):
-        return _is_node_stdlib(lib_name)
-    # Python scripts may not have a '.py' extension, so we don't check for it.
-    return _is_python_stdlib(lib_name)
+class _PythonParser(_FileParser):
+
+    import_regex = re.compile(r'^(from (\S+) )?import (.*)')
+
+    def is_stdlib_import(self, module: str) -> bool:
+        return _is_python_stdlib(module)
+
+    def match2module(self, match: Match[str]) -> str:
+        return '.'.join(filter(None, [match.group(2), match.group(3)]))
 
 
-_DIFF_LINE_REGEX = re.compile(r'^[-+]\s+')
-_PYTHON_IMPORT_REGEX = re.compile(r'^(from (\S+) )?import (.*)')
+def _is_typescript(filename: str) -> bool:
+    return filename.removesuffix('x').endswith('.ts')
+
 
 _ROOT_DIR = _run('git', 'rev-parse', '--show-toplevel')
 
@@ -75,14 +113,10 @@ def _get_diff(*args: str, **kwargs: Union[str, bool]) -> str:
 
 
 # TODO(cyrille): Separate better silent imports from others.
-def _get_packages(python_content: str, filename: str) -> set[str]:
-    return {
-        lib
-        for line in python_content.split('\n')
-        if line
-        if (match := _PYTHON_IMPORT_REGEX.match(line))
-        if not _is_stdlib(
-            lib := '.'.join(filter(None, [match.group(2), match.group(3)])), filename)}
+def _get_packages(content: str, filename: str) -> set[str]:
+    # Python is the default parser, because other files approximately follow its pattern.
+    parser = _TypescriptParser() if _is_typescript(filename) else _PythonParser()
+    return parser.get_packages(content)
 
 
 def _changed_imports(file: str, previous_file: Optional[str] = None) \
@@ -122,7 +156,7 @@ class PreCommitTestCase(unittest.TestCase):
         """Check if enough Bazel files have been changed."""
 
         changed_builds = {b for b in _get_diff('**/BUILD', name_only=True).split('\n') if b}
-        for file in _get_diff(name_only=True, G=_PYTHON_IMPORT_REGEX.pattern).split('\n'):
+        for file in _get_diff(name_only=True, G=_PythonParser.import_regex.pattern).split('\n'):
             if not file:
                 continue
             # TODO(cyrille): Do a finer check on the changed BUILD file.
