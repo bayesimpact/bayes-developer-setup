@@ -89,8 +89,11 @@ def _changed_imports(file: str, previous_file: Optional[str] = None) \
         -> tuple[set[str], set[str]]:
     with open(file, encoding='utf-8') as current_file:
         current_packages = _get_packages(current_file.read(), file)
-    old_packages = _get_packages(
-        _run('git', 'show', f'HEAD:{previous_file or file}'), previous_file or file)
+    previous_file = previous_file or file
+    try:
+        old_packages = _get_packages(_run('git', 'show', f'HEAD:{previous_file}'), previous_file)
+    except subprocess.CalledProcessError:
+        old_packages = set()
     return old_packages, current_packages
 
 
