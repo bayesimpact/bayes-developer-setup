@@ -4,7 +4,7 @@ Feature: pre-commit
   Background:
     Given I use the defined hook "pre-commit"
 
-  Scenario: Successful commit when
+  Scenario: Successful commit
     Given I am in a dummy git repo in "repo"
     When I commit a file "successful submission" with message:
       """
@@ -13,4 +13,14 @@ Feature: pre-commit
     Then the exit status should be 0
     And I should be on "main" git branch
     And the file "successful submission" should exist
+    And the git status should be clean
+
+  Scenario: Can commit new empty __init__ files
+    Given I am in a dummy git repo in "repo"
+    And I am in a Bazel repo
+    And an empty file named "__init__.py"
+    When I commit everything
+    Then the exit status should be 0
+    And I should be on "main" git branch
+    And the file "__init__.py" should exist
     And the git status should be clean
