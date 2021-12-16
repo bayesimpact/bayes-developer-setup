@@ -48,21 +48,22 @@ def _get_diff(*args: str, **kwargs: Union[str, bool]) -> str:
     return _run('git', 'diff', '--cached', *diff_args, 'HEAD', '--', *args)
 
 
+# TODO(cyrille): Separate better silent imports from others.
 def _get_packages(python_content: str) -> set[str]:
     return {
-        '.'.join(filter(None, [match.group(2), match.group(3)]))
+        lib
         for line in python_content.split('\n')
         if line
-        if (match := _PYTHON_IMPORT_REGEX.match(line))}
+        if (match := _PYTHON_IMPORT_REGEX.match(line))
+        if not _is_stdlib(lib := '.'.join(filter(None, [match.group(2), match.group(3)])))}
 
 
-def _changed_python_imports(file: str, previous_file: Optional[str] = None) -> list[str]:
-    if not file.endswith('.py'):
-        return ['Not a python module. Check by hand']
+def _changed_imports(file: str, previous_file: Optional[str] = None) \
+        -> tuple[list[str], list[str]]:
     with open(file, encoding='utf-8') as current_file:
         current_packages = _get_packages(current_file.read())
     old_packages = _get_packages(_run('git', 'show', f'HEAD:{previous_file or file}'))
-    return [lib for lib in old_packages ^ current_packages if not _is_stdlib(lib)]
+    return old_packages, current_packages
 
 
 class PreCommitTestCase(unittest.TestCase):
@@ -92,20 +93,17 @@ class PreCommitTestCase(unittest.TestCase):
     def test_bazel_files(self) -> None:
         """Check if enough Bazel files have been changed."""
 
-        # TODO(cyrille): Do a finer check on the changed BUILD files.
         changed_builds = {b for b in _get_diff('**/BUILD', name_only=True).split('\n') if b}
-        changed_imports = {
-            os.path.join(os.path.dirname(file), 'BUILD')
-            # TODO(cyrille): Do a finer check on the changed imports.
-            for file in _get_diff(name_only=True, G=_PYTHON_IMPORT_REGEX.pattern).split('\n')
-            if file
-            if _changed_python_imports(file)}
-        # TODO(cyrille): Make a more explicit error message.
-        self.assertEqual(
-            changed_builds, changed_imports,
-            msg='It looks like some of your import changes were not reported to Bazel.\n'
-            'If you are confident with your changes, re-commit your changes with '
-            'GIT_COMMIT_IGNORE_BAZEL_FILES=1 to ignore this hook.')
+        for file in _get_diff(name_only=True, G=_PYTHON_IMPORT_REGEX.pattern).split('\n'):
+            # TODO(cyrille): Do a finer check on the changed BUILD file.
+            if (build := os.path.join(os.path.dirname(file), 'BUILD')) in changed_builds:
+                continue
+            with self.subTest(file=file, build=build):
+                self.assertEqual(
+                    *_changed_imports(file),
+                    msg='It looks like some of your import changes were not reported to Bazel.\n'
+                    'If you are confident with your changes, re-commit your changes with '
+                    'GIT_COMMIT_IGNORE_BAZEL_FILES=1 to ignore this hook.')
 
     @unittest.skipIf(os.getenv('GIT_COMMIT_IGNORE_BAZEL_FILES'), 'Ignoring Bazel files')
     @unittest.skipIf(_miss_git_file('WORKSPACE'), 'Not a Bazel workspace')
