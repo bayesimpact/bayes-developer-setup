@@ -113,7 +113,8 @@ class PreCommitTestCase(unittest.TestCase):
         changed_files = (
             file
             for file in _get_diff(name_only=True).split('\n')
-            if os.path.exists(file))
+            if os.path.exists(file)
+            if os.path.basename(file) != '__init__.py' or os.path.getsize(file))
         try:
             _run('bazel', 'query', f'set({" ".join(changed_files)})')
         except subprocess.CalledProcessError:

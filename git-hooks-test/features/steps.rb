@@ -16,12 +16,22 @@ Given(/^I am in a dummy git repo in "([^"]+)"$/) do |dir_name|
   step %(I run `git branch -m main`)
 end
 
+Given (/^I (force )?commit everything$/) do |force|
+  step %(I run `git add -A`)
+  step %(I successfully run `git commit -#{force ? 'n' : ''}m "dummy content"`)
+end
+
 Given(/^I (force )?commit a file "([^"]+)" with message:$/) do |force, file_name, content|
   step %(a file named "#{file_name}" with:), %(dummy content)
   step %(I run `git add "#{file_name}"`)
   step %(I #{force ? 'successfully ' : ''}run `git commit -#{force ? 'n' : ''}m "#{content}"`)
 end
 
+Given(/^I am in a Bazel repo$/) do
+  step %(an empty file named "WORKSPACE")
+  step %(an empty file named "BUILD")
+  step %(I force commit everything)
+end
 
 Given(/^I am in a "([^"]+)" git repo cloned from "([^"]+)"$/) do |dir_name, cloned_dir|
   step %(I successfully run `git clone "#{cloned_dir}/.git" "#{dir_name}" --quiet`)
@@ -39,6 +49,7 @@ Given(/^I should be on "([^"]+)" git branch$/) do |name|
   }
 end
 
+# TODO(cyrille): Make sure we check untracked files.
 Given(/^the git status should be clean$/) do
   cd('.') {
     diff = `git diff HEAD --shortstat 2> /dev/null | tail -n1`.chomp
