@@ -196,6 +196,7 @@ class _PrInfos(typing.NamedTuple):
     auto_merge: _AutoMerge
     node_id: str
     number: int
+    is_remote_auto_deleted: bool
 
 
 class _Branch(typing.NamedTuple):
@@ -223,9 +224,9 @@ class _Branch(typing.NamedTuple):
     def push(self) -> None:
         _run('git', 'push', self.remote, f'{self.local}:{self.merge}')
 
-    def clean(self, *, keep_remote: bool = False) -> None:
+    def clean(self, *, should_clean_remote: bool = False) -> None:
         _run('git', 'branch', '-D', self.local)
-        if not keep_remote:
+        if should_clean_remote:
             _run('git', 'push', '-d', self.remote, self.merge)
 
     def with_initial(self, ref: str) -> '_Branch':
@@ -383,13 +384,16 @@ def get_pr_info(branch: str, should_auto_merge: bool = bool(_GIT_SUBMIT_AUTO_MER
         raw_pr_infos['viewerCanEnableAutoMerge'] or \
         raw_pr_infos['viewerCanDisableAutoMerge']
     will_auto_merge = bool((raw_pr_infos['autoMergeRequest'] or {}).get('enabledAt'))
-    pr_infos = _PrInfos(_AutoMerge(
-        is_enabled=will_auto_merge,
-        can_enable=raw_pr_infos['viewerCanEnableAutoMerge'],
-        can_disable=raw_pr_infos['viewerCanDisableAutoMerge'],
-    ), node_id=raw_pr_infos['id'], number=raw_pr_infos['number'])
+    pr_infos = _PrInfos(
+        _AutoMerge(
+            is_enabled=will_auto_merge,
+            can_enable=raw_pr_infos['viewerCanEnableAutoMerge'],
+            can_disable=raw_pr_infos['viewerCanDisableAutoMerge']),
+        node_id=raw_pr_infos['id'],
+        number=raw_pr_infos['number'],
+        is_remote_auto_deleted=repo_infos['deleteBranchOnMerge'])
     may_auto_merge = can_auto_merge or will_auto_merge
-    if repo_infos['deleteBranchOnMerge'] or not may_auto_merge:
+    if pr_infos.is_remote_auto_deleted or not may_auto_merge:
         return pr_infos
     logging.warning("The remote branch won't be deleted after auto-merge.")
     if _ask_yes_no('Do you want to update your repository settings?'):
@@ -569,7 +573,7 @@ def _push_to_remote(*, branch: _Branch, default: Optional[_Branch] = None, silen
 def _merge_now_or_later(pr_infos: _PrInfos, should_auto_merge: bool, sha1: str) -> bool:
     """Ask for a merge through github's API.
 
-    Return True if the merge is completed, False if it will be later on.
+    Return True if the remote should be cleaned up afterwards, False otherwise.
     """
 
     if pr_infos.auto_merge.is_enabled:
@@ -580,7 +584,7 @@ def _merge_now_or_later(pr_infos: _PrInfos, should_auto_merge: bool, sha1: str) 
         _run_hub(
             'api', '-X', 'PUT', f'/repos/{{owner}}/{{repo}}/pulls/{pr_infos.number}/merge',
             '-F', 'merge_method=squash', '-F', f'sha={sha1}')
-        return True
+        return not pr_infos.is_remote_auto_deleted
     enable_auto_merge(pr_infos.node_id)
     logging.info('Your branch will be merged once CI is successful.')
     return False
@@ -672,12 +676,12 @@ def main() -> None:
         return
     should_auto_merge = _should_auto_merge(args.branch, args.force, pr_infos)
     try:
-        keep_remote = not _merge_now_or_later(pr_infos, should_auto_merge, branch.initial)
+        should_clean_remote = _merge_now_or_later(pr_infos, should_auto_merge, branch.initial)
     except subprocess.CalledProcessError:
         abort(default, branch)
     _run('git', 'checkout', default.local)
     _run('git', 'pull', '--ff-only')
-    branch.clean(keep_remote=keep_remote)
+    branch.clean(should_clean_remote=should_clean_remote)
 
 
 if __name__ == '__main__':
