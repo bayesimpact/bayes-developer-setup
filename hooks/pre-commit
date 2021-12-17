@@ -38,6 +38,7 @@ def _is_typescript(filename: str) -> bool:
 # TODO(cyrille): Parse the content from here.
 class _FileParser:
 
+    # Must be a MULTILINE pattern.
     import_regex: Pattern[str]
 
     def __new__(cls, filename: str) -> '_FileParser':
@@ -71,7 +72,8 @@ class _FileParser:
 
 class _TypescriptParser(_FileParser):
 
-    import_regex = re.compile(r"^import( type)?( \w+,?)?(\s*{([^}]|\n)*})?(\s*from\s*)?'(.*)'$")
+    import_regex = re.compile(
+        r"^import( type)?( \w+,?)?(\s*{([^}]|\n)*})?(\s*from\s*)?'(.*)'$", re.MULTILINE)
 
     @staticmethod
     @functools.cache
@@ -97,7 +99,7 @@ class _TypescriptParser(_FileParser):
 
 class _PythonParser(_FileParser):
 
-    import_regex = re.compile(r'^(from (\S+) )?import (.*)')
+    import_regex = re.compile(r'^(from (\S+) )?import (.*)$', re.MULTILINE)
 
     def is_stdlib_import(self, module: str) -> bool:
         return _is_python_stdlib(module)
@@ -137,6 +139,8 @@ def _changed_imports(file: str, previous_file: Optional[str] = None) \
         old_packages = _get_packages(_run('git', 'show', f'HEAD:{previous_file}'), previous_file)
     except subprocess.CalledProcessError:
         old_packages = set()
+    logging.debug('Previously:\n%s', '\n'.join(old_packages))
+    logging.debug('Now:\n%s', '\n'.join(current_packages))
     return old_packages, current_packages
 
 
@@ -174,6 +178,7 @@ class PreCommitTestCase(unittest.TestCase):
             # TODO(cyrille): Do a finer check on the changed BUILD file.
             if (build := os.path.join(os.path.dirname(file), 'BUILD')) in changed_builds:
                 continue
+            logging.debug('Testing file %s', file)
             with self.subTest(file=file, build=build):
                 self.assertEqual(
                     *_changed_imports(file),
