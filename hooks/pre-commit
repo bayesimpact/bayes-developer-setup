@@ -140,6 +140,14 @@ def _changed_imports(file: str, previous_file: Optional[str] = None) \
     return old_packages, current_packages
 
 
+def _get_build_ref(buildfile: str, filename: str) -> str:
+    with open(buildfile, encoding='utf-8') as build:
+        for lineno, line in enumerate(build):
+            if filename in line:
+                return f'{buildfile}:{lineno}'
+    return buildfile
+
+
 class PreCommitTestCase(unittest.TestCase):
     """Run tests before commiting changes to git."""
 
@@ -174,7 +182,7 @@ class PreCommitTestCase(unittest.TestCase):
             # TODO(cyrille): Do a finer check on the changed BUILD file.
             if (build := os.path.join(os.path.dirname(file), 'BUILD')) in changed_builds:
                 continue
-            with self.subTest(file=file, build=build):
+            with self.subTest(file=file, build=_get_build_ref(build, os.path.basename(file))):
                 self.assertEqual(
                     *_changed_imports(file),
                     msg='It looks like some of your import changes were not reported to Bazel.\n'
