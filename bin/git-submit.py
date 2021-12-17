@@ -182,6 +182,7 @@ class _Arguments(typing.Protocol):
     force: bool
     prefix: Optional[str]
     rebase: bool
+    should_continue: bool
     user: str
     xtrace: Optional[str]
 
@@ -587,7 +588,7 @@ def _merge_now_or_later(pr_infos: _PrInfos, should_auto_merge: bool, sha1: str) 
 
 
 def _prepare_args(args: _Arguments) -> _Arguments:
-    args.abort = args.abort or args.rebase
+    args.abort = args.abort or (args.rebase and not args.should_continue)
     if args.abort and not args.user:
         args.user = _run('git', 'config', 'user.email').split('@', 1)[0]
     if not args.branch:
@@ -633,6 +634,9 @@ def main() -> None:
         Also recreate a branch from origin, without its username prefix.''')
     parser.add_argument('--rebase', '-r', action='store_true', help='''
         Rebase the given branch on top of origin/HEAD and try to submit it.''')
+    parser.add_argument(
+        '--continue', dest='should_continue', action='store_true', help='''
+        Continue a previous --rebase action, before submitting.''')
     user_action = parser.add_argument('--user', '-u', default='', help='''
         Set the prefix for the remote branch to USER. Default is username from the git user's email
         (such as in username@example.com). Only useful for '--abort'/'--rebase'.''')
@@ -646,6 +650,8 @@ def main() -> None:
     if args.xtrace:
         del _XTRACE_PREFIX[:]
         _XTRACE_PREFIX.append(args.xtrace)
+    if args.should_continue:
+        _run('git', 'rebase', '--continue')
     branch = _get_branch(args.branch, args.default, args.prefix)
     pr_infos = get_pr_info(branch.merge)
     if args.abort:
