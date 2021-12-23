@@ -106,20 +106,17 @@ add_to_shellrc 'man' "MANPATH=\$(manpath 2> /dev/null); if [[ \":\$MANPATH:\" !=
 # Install autocompletions.
 # TODO(cyrille): Try to unify those behaviors.
 if [ "$(uname)" == "Darwin" ] && which -s brew; then
-  if brew list bash-completion; then
+  if brew list bash-completion > /dev/null 2>&1; then
     AUTOCOMPLETE_PATH="$(brew --prefix)/etc/bash_completion.d"
-  elif brew list bash-completion@2; then
-    AUTOCOMPLETE_PATH="/usr/local/share/bash-completion/completions"
+  elif brew list bash-completion@2 > /dev/null 2>&1; then
+    AUTOCOMPLETE_PATH="${BASH_COMPLETION_USER_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion}/completions"
   fi
 elif [ "$(uname)" == "Linux" ]; then
   AUTOCOMPLETE_PATH="${BASH_COMPLETION_USER_DIR:-${XDG_DATA_HOME:-${HOME}/.local/share}/bash-completion}/completions"
-  mkdir -p "$AUTOCOMPLETE_PATH"
 fi
-if [ -d "$AUTOCOMPLETE_PATH" ]; then
-  # TODO(cyrille): Put the completion scripts in a subfolder.
-  for completion_file in $(ls *.bash_completion); do
-    ln -s $DIR/$completion_file "$AUTOCOMPLETE_PATH/${completion_file%".bash_completion"}" 2> /dev/null
-  done
+if [ -n "$AUTOCOMPLETE_PATH" ]; then
+  mkdir -p "$AUTOCOMPLETE_PATH"
+  ln -fs "$DIR/bash_completion.d/*" "$AUTOCOMPLETE_PATH" 2>/dev/null
 fi
 
 # Install hub.

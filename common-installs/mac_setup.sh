@@ -97,7 +97,7 @@ declare -a packages=(
 )
 
 readonly BASH_COMPLETION_DESCRIPTION="Autocompletion for CLI in bash. Useful for git, docker-compose, ..."
-if [[ $(sort -V <<< $'4.0.0\n'"$BASH_VERSION" | head -n1) == "4.0.0" ]]; then
+if [[ $(sort -V <<< "$BASH_VERSION"$'\n4.2' | head -n1) == "4.2" ]]; then
   packages+=("bash-completion@2: $BASH_COMPLETION_DESCRIPTION")
 else
   packages+=("bash-completion: $BASH_COMPLETION_DESCRIPTION")
