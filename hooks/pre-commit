@@ -155,9 +155,14 @@ def _get_build_ref(buildfile: str, filename: str) -> str:
 class PreCommitTestCase(unittest.TestCase):
     """Run tests before commiting changes to git."""
 
+    def _run_or_skip(self, *args: str) -> str:
+        cmd = shutil.which(args[0])
+        if not cmd:
+            self.skipTest(f'{args[0]} is not installed')
+        return _run(*args)
+
     @unittest.skipIf(os.getenv('GIT_COMMIT_IGNORE_CIRCLECI'), 'Ignoring CircleCI config')
     @unittest.skipIf(_miss_git_file('.circleci/config.yml'), 'Not a CircleCI repo')
-    @unittest.skipIf(not shutil.which('circleci'), 'CircleCI tool is not installed')
     def test_circle_config(self) -> None:
         """Check that CircleCI's config is valid."""
 
@@ -169,7 +174,7 @@ class PreCommitTestCase(unittest.TestCase):
             # Config file has been modified. Let's check if it's valid.
             pass
         try:
-            _run('circleci', 'config', 'validate', config)
+            self._run_or_skip('circleci', 'config', 'validate', config)
             return
         except subprocess.CalledProcessError:
             self.fail('CircleCI config is not valid.')
@@ -205,19 +210,18 @@ class PreCommitTestCase(unittest.TestCase):
             if os.path.exists(file)
             if os.path.basename(file) != '__init__.py' or os.path.getsize(file))
         try:
-            _run('bazel', 'query', f'set({" ".join(changed_files)})')
+            self._run_or_skip('bazel', 'query', f'set({" ".join(changed_files)})')
         except subprocess.CalledProcessError:
             self.fail('Some changed files are not in Bazel dependency tree')
 
     @unittest.skipIf(os.getenv('GIT_COMMIT_IGNORE_BAZEL'), 'Ignoring Bazel tree')
     @unittest.skipIf(_miss_git_file('WORKSPACE'), 'Not a Bazel workspace')
     @unittest.skipIf(_miss_git_file('.circleci/BUILD'), 'No Bazel rules defined for CircleCI')
-    @unittest.skipIf(not shutil.which('bazel'), 'Bazel is not installed')
     def test_bazel_tree(self) -> None:
         """Check that Bazel can parse its dependency tree."""
 
         try:
-            _run('bazel', 'query', 'deps(//.circleci/...)')
+            self._run_or_skip('bazel', 'query', 'deps(//.circleci/...)')
         except subprocess.CalledProcessError:
             self.fail('Bazel resolution failed')
 
