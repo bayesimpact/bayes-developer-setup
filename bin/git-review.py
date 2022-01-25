@@ -22,7 +22,7 @@ import re
 import subprocess
 import sys
 import typing
-from typing import Any, Callable, NoReturn, Optional, Sequence, Set, TypedDict, Union
+from typing import Any, Callable, Iterator, NoReturn, Optional, Sequence, Set, TypedDict, Union
 import unicodedata
 
 try:
@@ -241,17 +241,27 @@ class _GithubPullRequest(typing.NamedTuple):
     reviewers: Set[str]
 
     @staticmethod
+    def _fetch_all_pages(per_page: int = 30) -> Iterator[_GithubAPIPullRequest]:
+        for page in itertools.count(1):
+            page_prs = typing.cast(list[_GithubAPIPullRequest], json.loads(
+                _run_hub([
+                    'api',
+                    fr'/repos/{{owner}}/{{repo}}/pulls?per_page={per_page}&page={page}',
+                ], cache=_ONE_MINUTE)))
+            yield from page_prs
+            if len(page_prs) < per_page:
+                break
+
+    @staticmethod
     @functools.lru_cache(maxsize=None)
     def fetch_all() -> list['_GithubPullRequest']:
         """Get all pull requests for the current repository."""
 
-        all_prs = typing.cast(list[_GithubAPIPullRequest], json.loads(
-            _run_hub(['api', r'/repos/{owner}/{repo}/pulls'], cache=_ONE_MINUTE)))
         return [
             _GithubPullRequest(
                 pr['base']['ref'], pr['head']['ref'], pr['number'],
                 {rev['login'] for rev in pr['requested_reviewers']})
-            for pr in all_prs]
+            for pr in _GithubPullRequest._fetch_all_pages()]
 
 
 class LoginHTMLParser(html_parser.HTMLParser):
