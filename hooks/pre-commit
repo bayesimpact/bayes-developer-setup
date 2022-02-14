@@ -73,7 +73,7 @@ class _FileParser:
 class _TypescriptParser(_FileParser):
 
     import_regex = re.compile(
-        r"^import( type)?( \w+,?)?(\s*{([^}]|\n)*})?(\s*from\s*)?'(.*)'$", re.MULTILINE)
+        r"^(import|export)( type)?( \w+,?)?(\s*{([^}]|\n)*})?(\s*from\s*)?'(.*)'$", re.MULTILINE)
 
     @staticmethod
     @functools.cache
